@@ -35,7 +35,7 @@ with DAG(
         # -------------------- Variables de entorno para el contenedor --------------------
         environment={
             "IS_PROD": "True",
-            "MONGO_URI": "mongodb://host.docker.internal:27017",
+            "MONGO_URI": "mongodb://mongo:27017",
             "MONGO_RESTART": "False",
         },
     ).expand(
