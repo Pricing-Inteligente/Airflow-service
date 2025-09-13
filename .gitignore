@@ -1,0 +1,8 @@
+# Ignorar pycache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignorar todo dentro de logs menos .gitkeep
+logs/*
+!logs/.gitkeep
