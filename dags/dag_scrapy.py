@@ -19,7 +19,7 @@ image_name = "giancass07/scrapy-app"
 URL_GATEWAY = "http://10.101.137.189:8000/receive"
 
 # Conexión a Mongo
-MONGO_URI = "mongodb://10.34.1.50:8580"  
+MONGO_URI = "mongodb://10.34.1.50:17048"  
 DB_NAME = "raw_prodcutos"                 
 COLLECTION_NAME = "arroz"   
 
