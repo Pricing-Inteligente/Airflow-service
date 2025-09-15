@@ -17,8 +17,7 @@ network:
 AIRFLOW_COMPOSE = docker compose -f docker-compose.yaml
 
 airflow-up: network
-	$(AIRFLOW_COMPOSE) build --no-cache
-	$(AIRFLOW_COMPOSE) up -d
+	$(AIRFLOW_COMPOSE) up -d --build 
 
 airflow-down:
 	$(AIRFLOW_COMPOSE) down
