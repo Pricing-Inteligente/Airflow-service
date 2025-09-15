@@ -73,6 +73,7 @@ x-airflow-common:
     # If you want to use it, outcomment it and replace airflow.cfg with the name of your config file
     # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/.env:/opt/airflow/.env
     # - ${AIRFLOW_PROJ_DIR:-.}/../apps/transform:/opt/apps/transform # LLM Extraction app
     - /var/run/docker.sock:/var/run/docker.sock
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
