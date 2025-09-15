@@ -15,7 +15,7 @@
     }
 
     # Conexión a Mongo
-    MONGO_URI = "mongodb://mongo:8580"  
+    MONGO_URI = "mongodb://10.34.1.50:8580"  
     DB_NAME = "raw_productos"                 
     COLLECTION_NAME = "arroz" 
 
