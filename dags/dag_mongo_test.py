@@ -33,7 +33,7 @@ def convert_objectid(obj):
 def send_post_to_gateway():
     print("Iniciando conexión a MongoDB...")
     try:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
         client.admin.command('ping')
         print("Conexión a MongoDB exitosa")
         db = client[DB_NAME]
@@ -45,7 +45,7 @@ def send_post_to_gateway():
             return
 
         payload = convert_objectid(doc)
-        print("Documento listo para enviar:", payload)
+        print("Documento listo para enviar")
 
         response = requests.post(URL_GATEWAY, json=payload)
         print("Response status:", response.status_code)
