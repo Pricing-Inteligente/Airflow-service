@@ -20,7 +20,7 @@ URL_GATEWAY = "http://10.101.137.189:8000/receive"
 
 # Conexión a Mongo
 MONGO_URI = "mongodb://10.34.1.50:17048"  
-DB_NAME = "raw_prodcutos"                 
+DB_NAME = "raw_productos"                 
 COLLECTION_NAME = "arroz"   
 
 def send_post_to_gateway(**kwargs):
