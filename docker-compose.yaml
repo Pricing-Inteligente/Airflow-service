@@ -49,8 +49,8 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.11.0}
-  build: .
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.11.0}
+  # build: .
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -87,10 +87,6 @@ x-airflow-common:
     postgres:
       condition: service_healthy
 
-networks:
-  airflow_net:
-    external: true
-
 services:
   postgres:
     image: postgres:13
@@ -106,8 +102,6 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-    networks:
-      - airflow_net
 
   redis:
     # Redis is limited to 7.2-bookworm due to licencing change
@@ -122,8 +116,6 @@ services:
       retries: 50
       start_period: 30s
     restart: always
-    networks:
-      - airflow_net
 
   airflow-webserver:
     <<: *airflow-common
@@ -137,8 +129,6 @@ services:
       retries: 5
       start_period: 30s
     restart: always
-    networks:
-      - airflow_net
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -154,8 +144,6 @@ services:
       retries: 5
       start_period: 30s
     restart: always
-    networks:
-      - airflow_net
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -179,8 +167,6 @@ services:
       # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
     restart: always
-    networks:
-      - airflow_net
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -196,8 +182,6 @@ services:
       retries: 5
       start_period: 30s
     restart: always
-    networks:
-      - airflow_net
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -266,8 +250,6 @@ services:
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
-    networks:
-      - airflow_net
 
   airflow-cli:
     <<: *airflow-common
@@ -277,8 +259,6 @@ services:
       <<: *airflow-common-env
       CONNECTION_CHECK_MAX_COUNT: "0"
     # Workaround for entrypoint issue. See: https://github.com/apache/airflow/issues/16252
-    networks:
-      - airflow_net
     command:
       - bash
       - -c
@@ -305,10 +285,6 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - airflow_net
 
 volumes:
   postgres-db-volume:
-
-
