@@ -14,8 +14,10 @@ default_args = {
 total_shards = 3 
 image_name = "giancass07/scrapy-app"
 
+DIRECCION_HTTP_POST_MAQUINA = "http://10.101.137.251:8000/receive" 
+
 def send_post_to_gateway():
-    url = "http:///10.101.137.251:8000/receive" 
+    url = DIRECCION_HTTP_POST_MAQUINA
     payload = {"msg": "Hola desde Airflow"}
     
     response = requests.post(url, json=payload)
