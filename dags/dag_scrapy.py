@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from pymongo import MongoClient
 from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.operators.empty import EmptyOperator
@@ -16,11 +17,31 @@ image_name = "giancass07/scrapy-app"
 
 DIRECCION_HTTP_POST_MAQUINA = "http://10.101.137.251:8000/receive" 
 
-def send_post_to_gateway():
-    url = DIRECCION_HTTP_POST_MAQUINA
-    payload = {"msg": "Hola desde Airflow"}
+# URL de tu gateway
+URL_GATEWAY = "http://10.101.137.251:8080/receive"
+
+# Conexión a Mongo
+MONGO_URI = "mongodb://mongo:27017"  
+DB_NAME = "raw_prodcutos"                 
+COLLECTION_NAME = "arroz"   
+
+def send_post_to_gateway(**kwargs):
+    # Conectarse a Mongo
+    client = MongoClient(MONGO_URI)
+    db = client[DB_NAME]
+    collection = db[COLLECTION_NAME]
     
-    response = requests.post(url, json=payload)
+    # Tomar un documento (ejemplo: el primero)
+    doc = collection.find_one()  
+    
+    if doc is None:
+        print("No hay documentos en la colección")
+        return
+
+    payload = doc
+    
+    response = requests.post(URL_GATEWAY, json=payload)  # Enviar POST al gateway
+    
     print("Response status:", response.status_code)
     print("Response body:", response.json())
 
