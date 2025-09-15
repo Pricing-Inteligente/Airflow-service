@@ -15,7 +15,7 @@ if not VPN_IP:
     raise ValueError("La variable de entorno 'VPN_IP' no está definida")
 
 URL_GATEWAY = f"http://{VPN_IP}:8000/receive"
-MONGO_URI = "mongodb://10.34.1.50:17048"
+MONGO_URI = "mongodb://mongo:17048"
 DB_NAME = "raw_productos"
 COLLECTION_NAME = "arroz"
 
