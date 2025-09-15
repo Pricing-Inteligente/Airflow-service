@@ -15,13 +15,11 @@ default_args = {
 total_shards = 3 
 image_name = "giancass07/scrapy-app"
 
-DIRECCION_HTTP_POST_MAQUINA = "http://10.101.137.251:8000/receive" 
-
 # URL de tu gateway
-URL_GATEWAY = "http://10.101.137.251:8080/receive"
+URL_GATEWAY = "http://10.101.137.189:8000/receive"
 
 # Conexión a Mongo
-MONGO_URI = "mongodb://mongo:27017"  
+MONGO_URI = "mongodb://10.34.1.50:8580"  
 DB_NAME = "raw_prodcutos"                 
 COLLECTION_NAME = "arroz"   
 
@@ -65,7 +63,7 @@ with DAG(
         network_mode="airflow_net",
         environment={
             "IS_PROD": "True",
-            "MONGO_URI": "mongodb://mongo:27017",
+            "MONGO_URI": MONGO_URI,
             "MONGO_RESTART": "False",
         },
     ).expand(
