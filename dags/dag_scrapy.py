@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 from pymongo import MongoClient
+from os import getenv
+from dotenv import load_dotenv
 from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.operators.empty import EmptyOperator
@@ -12,17 +14,23 @@ default_args = {
     "retry_delay": timedelta(minutes=1)
 }
 
-total_shards = 3 
-image_name = "giancass07/scrapy-app"
-
-# URL de tu gateway
-URL_GATEWAY = "http://10.101.137.189:8000/receive"
-
 # Conexión a Mongo
 MONGO_URI = "mongodb://10.34.1.50:17048"  
 DB_NAME = "raw_productos"                 
-COLLECTION_NAME = "arroz"   
+COLLECTION_NAME = "arroz" 
 
+total_shards = 3 
+image_name = "giancass07/scrapy-app"
+
+# Cargar variables de entorno
+load_dotenv()
+
+# Obtener IP de la VPN desde la variable de entorno
+VPN_IP = getenv("VPN_IP")
+if not VPN_IP:
+    raise ValueError("La variable de entorno 'VPN_IP' no está definida") 
+
+# 
 def send_post_to_gateway(**kwargs):
     # Conectarse a Mongo
     client = MongoClient(MONGO_URI)

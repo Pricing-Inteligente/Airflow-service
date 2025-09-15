@@ -6,3 +6,6 @@ __pycache__/
 # Ignorar todo dentro de logs menos .gitkeep
 logs/*
 !logs/.gitkeep
+
+# Ignorar archivos .env
+.env
