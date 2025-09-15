@@ -46,7 +46,7 @@ def send_post_to_gateway(**kwargs):
 
     payload = doc
     
-    response = requests.post(URL_GATEWAY, json=payload)  # Enviar POST al gateway
+    response = requests.post(VPN_IP, json=payload)  # Enviar POST al gateway
     
     print("Response status:", response.status_code)
     print("Response body:", response.json())
