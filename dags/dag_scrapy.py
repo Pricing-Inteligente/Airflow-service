@@ -72,14 +72,13 @@ with DAG(
             task_id="product_scraping_task",
             image=image_name,
             api_version='auto',
-            pull_latest=True,
             auto_remove="force",
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
                 "IS_PROD": "True",
                 "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": "False",
+                "MONGO_RESTART": "True",
             },
         ).expand(
             command=[f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
@@ -89,14 +88,13 @@ with DAG(
             task_id="variable_scraping_task",
             image=image_name,
             api_version='auto',
-            pull_latest=True,
             auto_remove="force",
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
                 "IS_PROD": "True",
                 "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": "False",
+                "MONGO_RESTART": "True",
             },
         ).expand(
             command=[f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
