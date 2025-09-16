@@ -108,4 +108,4 @@ with DAG(
     # END
     end = EmptyOperator(task_id="end")
 
-    start >> scraping_group >> send_to_gateway >> end
+    start >> pull_image >> scraping_group >> send_to_gateway >> end
