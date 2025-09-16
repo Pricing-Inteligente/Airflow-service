@@ -6,6 +6,7 @@ from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
 from airflow.utils.task_group import TaskGroup
 import requests
 
@@ -57,6 +58,12 @@ with DAG(
 
     # START 
     start = EmptyOperator(task_id="start")
+    
+    # Pull latest Docker image
+    pull_image = BashOperator(
+        task_id="pull_latest_image",
+        bash_command=f"docker pull {image_name}:latest"
+    )
 
     # Grouping scraping tasks
     with TaskGroup("scraping_group") as scraping_group:
