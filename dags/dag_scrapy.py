@@ -6,6 +6,7 @@ from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
+from airflow.utils.task_group import TaskGroup
 import requests
 
 default_args = {
@@ -25,19 +26,14 @@ image_name = "giancass07/scrapy-app"
 # Cargar variables de entorno
 load_dotenv()
 
-# Obtener IP de la VPN desde la variable de entorno
 VPN_IP = getenv("VPN_IP")
 if not VPN_IP:
     raise ValueError("La variable de entorno 'VPN_IP' no está definida") 
 
-# 
 def send_post_to_gateway(**kwargs):
-    # Conectarse a Mongo
     client = MongoClient(MONGO_URI)
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME]
-    
-    # Tomar un documento (ejemplo: el primero)
     doc = collection.find_one()  
     
     if doc is None:
@@ -45,8 +41,7 @@ def send_post_to_gateway(**kwargs):
         return
 
     payload = doc
-    
-    response = requests.post(VPN_IP, json=payload)  # Enviar POST al gateway
+    response = requests.post(VPN_IP, json=payload)  
     
     print("Response status:", response.status_code)
     print("Response body:", response.json())
@@ -58,31 +53,51 @@ with DAG(
     catchup=False
 ) as dag:
 
-    start = EmptyOperator(task_id="start")
-
     shards = list(range(total_shards))
 
-    scraping_task = DockerOperator.partial(
-        task_id="scrapy_shard",
-        image=image_name,
-        api_version='auto',
-        auto_remove="force",
-        docker_url="unix://var/run/docker.sock",
-        network_mode="airflow_net",
-        environment={
-            "IS_PROD": "True",
-            "MONGO_URI": MONGO_URI,
-            "MONGO_RESTART": "False",
-        },
-    ).expand(
-        command=[f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
-    )
+    # START 
+    start = EmptyOperator(task_id="start")
 
+    # Grouping scraping tasks
+    with TaskGroup("scraping_group") as scraping_group:
+        # Product scraping task
+        product_scraping_task = DockerOperator.partial(
+            task_id="product_scraping_task",
+            image=image_name,
+            api_version='auto',
+            auto_remove="force",
+            docker_url="unix://var/run/docker.sock",
+            network_mode="airflow_net",
+            environment={
+                "IS_PROD": "True",
+                "MONGO_URI": MONGO_URI,
+                "MONGO_RESTART": "False",
+            },
+        ).expand(
+            command=[f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
+        )
+        # Variables scraping task
+        variable_scraping_task = DockerOperator.partial(
+            task_id="variable_scraping_task",
+            image=image_name,
+            api_version='auto',
+            auto_remove="force",
+            docker_url="unix://var/run/docker.sock",
+            network_mode="airflow_net",
+            environment={
+                "IS_PROD": "True",
+                "MONGO_URI": MONGO_URI,
+                "MONGO_RESTART": "False",
+            },
+        ).expand(
+            command=[f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
+        )
+    # Task to send data to the gateway
     send_to_gateway = PythonOperator(
         task_id="send_to_gateway",
         python_callable=send_post_to_gateway
     )
-
+    # END
     end = EmptyOperator(task_id="end")
 
-    start >> scraping_task >> send_to_gateway >> end
+    start >> scraping_group >> send_to_gateway >> end
