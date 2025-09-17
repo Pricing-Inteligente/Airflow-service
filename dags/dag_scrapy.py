@@ -46,6 +46,9 @@ def send_post_to_gateway(**kwargs):
 
     # only keep the _id as string
     payload = {"_id": str(doc["_id"])}
+    
+    print("Document to send:", payload)
+    print("Sending payload to gateway...")
 
     # send to gateway
     response = requests.post(f"http://{VPN_IP}:8000/receive", json=payload)
