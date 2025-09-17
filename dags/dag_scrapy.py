@@ -22,7 +22,7 @@ DB_NAME = "raw_productos"
 COLLECTION_NAME = "arroz" 
 
 total_shards = 1
-image_name = "giancass07/scrapy-app:v1"
+image_name = "giancass07/scrapy-app:v1.1"
 
 # Cargar variables de entorno
 load_dotenv()
