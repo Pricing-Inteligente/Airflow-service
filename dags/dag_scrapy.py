@@ -21,7 +21,7 @@ MONGO_URI = "mongodb://192.168.40.10:8580"
 DB_NAME = "raw_productos"                 
 COLLECTION_NAME = "arroz" 
 
-total_shards = 1
+total_shards = 3
 image_name = "giancass07/scrapy-app:v1.1"
 
 # Cargar variables de entorno
