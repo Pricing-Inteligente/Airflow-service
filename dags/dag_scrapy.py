@@ -21,8 +21,8 @@ MONGO_URI = "mongodb://host.docker.internal:8580"
 DB_NAME = "raw_productos"                 
 COLLECTION_NAME = "arroz" 
 
-total_shards = 3 
-image_name = "giancass07/scrapy-app"
+total_shards = 1
+image_name = "giancass07/scrapy-app:v1"
 
 # Cargar variables de entorno
 load_dotenv()
@@ -62,7 +62,7 @@ with DAG(
     # Pull latest Docker image
     pull_image = BashOperator(
         task_id="pull_latest_image",
-        bash_command=f"docker pull {image_name}:latest"
+        bash_command=f"docker pull {image_name}"
     )
 
     # Grouping scraping tasks
@@ -76,7 +76,7 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "True",
+                "IS_PROD": "False",
                 "MONGO_URI": MONGO_URI,
                 "MONGO_RESTART": "False",
             },
@@ -92,7 +92,7 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "True",
+                "IS_PROD": "False",
                 "MONGO_URI": MONGO_URI,
                 "MONGO_RESTART": "False",
             },
