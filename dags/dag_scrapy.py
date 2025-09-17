@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 from os import getenv
+from bson import json_util
 from dotenv import load_dotenv
 from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
@@ -9,6 +10,7 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 from airflow.utils.task_group import TaskGroup
 import requests
+import json
 
 default_args = {
     "start_date": datetime(2025, 9, 6),
@@ -41,7 +43,7 @@ def send_post_to_gateway(**kwargs):
         print("No hay documentos en la colección")
         return
 
-    payload = doc
+    payload = json.loads(json_util.dumps(doc))
     response = requests.post(f"http://{VPN_IP}:8000/endpoint", json=payload)  
     
     print("Response status:", response.status_code)
