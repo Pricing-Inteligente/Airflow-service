@@ -17,7 +17,7 @@ default_args = {
 }
 
 # Conexión a Mongo
-MONGO_URI = "mongodb://host.docker.internal:8580"  
+MONGO_URI = "mongodb://192.168.40.10:8580"  
 DB_NAME = "raw_productos"                 
 COLLECTION_NAME = "arroz" 
 
