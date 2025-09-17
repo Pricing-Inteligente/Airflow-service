@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 from os import getenv
-from bson import json_util
+from bson import json_util, ObjectId
 from dotenv import load_dotenv
 from airflow import DAG
 from airflow.providers.docker.operators.docker import DockerOperator
@@ -37,17 +37,25 @@ def send_post_to_gateway(**kwargs):
     client = MongoClient(MONGO_URI)
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME]
-    doc = collection.find_one()  
     
+    # fetch one doc
+    doc = collection.find_one()
     if doc is None:
         print("No hay documentos en la colección")
         return
 
-    payload = json.loads(json_util.dumps(doc))
-    response = requests.post(f"http://{VPN_IP}:8000/receive", json=payload)  
-    
+    # only keep the _id as string
+    payload = {"_id": str(doc["_id"])}
+
+    # send to gateway
+    response = requests.post(f"http://{VPN_IP}:8000/receive", json=payload)
+
+    print("Payload sent:", payload)
     print("Response status:", response.status_code)
-    print("Response body:", response.json())
+    try:
+        print("Response body:", response.json())
+    except Exception:
+        print("Non-JSON response:", response.text)
 
 with DAG(
     "scrapy_shards_dag",
