@@ -44,7 +44,7 @@ def send_post_to_gateway(**kwargs):
         return
 
     payload = json.loads(json_util.dumps(doc))
-    response = requests.post(f"http://{VPN_IP}:8000/endpoint", json=payload)  
+    response = requests.post(f"http://{VPN_IP}:8000/receive", json=payload)  
     
     print("Response status:", response.status_code)
     print("Response body:", response.json())
