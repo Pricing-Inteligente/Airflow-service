@@ -214,7 +214,13 @@ with DAG(
         task_id="send_ids_to_rabbit",
         python_callable=send_to_rabbit
     )
+    
+    # Task to save cleaned data to PostgreSQL
+    save_to_postgres = PythonOperator(
+        task_id="mongo_to_postgres",
+        python_callable=mongo_to_pg
+    )
     # END
     end = EmptyOperator(task_id="end")
 
-    start >> pull_image >> scraping_group >> queue_to_rabbit >> end
+    start >> pull_image >> scraping_group >> queue_to_rabbit >> save_to_postgres >> end
