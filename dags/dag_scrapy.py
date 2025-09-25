@@ -21,7 +21,7 @@ default_args = {
     "retry_delay": timedelta(minutes=1)
 }
 
-IS_PROD = False
+IS_PROD = True
 
 # Conexión a Mongo
 MONGO_URI = "192.168.40.10:8580"
@@ -186,7 +186,7 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "True",
+                "IS_PROD": IS_PROD,
                 "MONGO_URI": MONGO_URI,
                 "MONGO_RESTART": "True",
             },
@@ -202,7 +202,7 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "True",
+                "IS_PROD": IS_PROD,
                 "MONGO_URI": MONGO_URI,
                 "MONGO_RESTART": "True",
             },
