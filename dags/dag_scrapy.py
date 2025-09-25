@@ -30,19 +30,28 @@ total_shards = 3
 image_name = "giancass07/scrapy-app:v1.1"
 
 
-def send_post_to_rabbit(**kwargs):
+def send_to_rabbit(**kwargs):
     client = MongoClient(MONGO_URI)
     db = client[MONGO_PRODUCTS_DB]
-    
-    VPN_IP="10.101.137.179"
-    print("VPN_IP=", VPN_IP)
 
-    print(f"=== SENDING TO RABBIT from {MONGO_PRODUCTS_DB}===")
+    RABBIT_HOST = "192.168.40.10"
+    RABBIT_PORT = 8180  # tu puerto expuesto de RabbitMQ
+
+    print(f"=== SENDING TO RABBIT at {RABBIT_HOST}:{RABBIT_PORT} from {MONGO_PRODUCTS_DB}===")
+
+    # Conexión a RabbitMQ
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host=RABBIT_HOST, port=RABBIT_PORT)
+    )
+    channel = connection.channel()
+
+    # Creamos una cola llamada "mongo_docs"
+    channel.queue_declare(queue="mongo_docs", durable=True)
+
     for collection_name in db.list_collection_names():
         collection = db[collection_name]
         print(f"--- Processing collection: {collection_name} ---")
 
-        # Iterate over all docs in this collection
         for doc in collection.find({}, {"_id": 1}):  # fetch only _id
             payload = {
                 "collection": collection_name,
@@ -50,21 +59,21 @@ def send_post_to_rabbit(**kwargs):
             }
 
             print("Document to send:", payload)
-            print("Sending payload to gateway...")
 
             try:
-                response = requests.post(f"http://{VPN_IP}:8000/receive", json=payload)
-                print("Payload sent:", payload)
-                print("Response status:", response.status_code)
-
-                try:
-                    print("Response body:", response.json())
-                except Exception:
-                    print("Non-JSON response:", response.text)
+                # Enviar a RabbitMQ
+                channel.basic_publish(
+                    exchange="",
+                    routing_key="mongo_docs",
+                    body=str(payload).encode(),
+                    properties=pika.BasicProperties(delivery_mode=2)  # persistente
+                )
+                print("Payload sent to Rabbit:", payload)
 
             except Exception as e:
                 print(f"Error sending payload for {payload}: {e}")
 
+    connection.close()
 with DAG(
     "scrapy_shards_dag",
     schedule_interval=None,
@@ -121,7 +130,7 @@ with DAG(
     # Task to send data to the gateway
     send_to_gateway = PythonOperator(
         task_id="send_ids_to_rabbit",
-        python_callable=send_post_to_rabbit
+        python_callable=send_to_rabbit
     )
     # END
     end = EmptyOperator(task_id="end")

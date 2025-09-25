@@ -4,4 +4,5 @@ RUN pip install --no-cache-dir \
     lxml \
     dotenv \
     pymongo \
-    requests
+    requests \
+    pika
