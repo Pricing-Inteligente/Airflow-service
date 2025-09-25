@@ -11,6 +11,7 @@ from airflow.operators.bash import BashOperator
 from airflow.utils.task_group import TaskGroup
 import requests
 import json
+import os
 
 default_args = {
     "start_date": datetime(2025, 9, 6),
@@ -18,10 +19,12 @@ default_args = {
     "retry_delay": timedelta(minutes=1)
 }
 
+IS_PROD = False
+
 # Conexión a Mongo
-MONGO_URI = "mongodb://192.168.40.10:8580"  
-DB_NAME = "raw_productos"                 
-COLLECTION_NAME = "arroz" 
+MONGO_URI = "192.168.40.10:8580"
+MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD para productos
+# MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables" # BD para variables
 
 total_shards = 3
 image_name = "giancass07/scrapy-app:v1.1"
@@ -33,32 +36,36 @@ VPN_IP = getenv("VPN_IP")
 if not VPN_IP:
     raise ValueError("La variable de entorno 'VPN_IP' no está definida") 
 
-def send_post_to_gateway(**kwargs):
+def send_post_to_rabbit(**kwargs):
     client = MongoClient(MONGO_URI)
-    db = client[DB_NAME]
-    collection = db[COLLECTION_NAME]
-    
-    # fetch one doc
-    doc = collection.find_one()
-    if doc is None:
-        print("No hay documentos en la colección")
-        return
+    db = client[MONGO_PRODUCTS_DB]
 
-    # only keep the _id as string
-    payload = {"_id": str(doc["_id"])}
-    
-    print("Document to send:", payload)
-    print("Sending payload to gateway...")
+    for collection_name in db.list_collection_names():
+        collection = db[collection_name]
+        print(f"--- Processing collection: {collection_name} ---")
 
-    # send to gateway
-    response = requests.post(f"http://{VPN_IP}:8000/receive", json=payload)
+        # Iterate over all docs in this collection
+        for doc in collection.find({}, {"_id": 1}):  # fetch only _id
+            payload = {
+                "collection": collection_name,
+                "_id": str(doc["_id"])
+            }
 
-    print("Payload sent:", payload)
-    print("Response status:", response.status_code)
-    try:
-        print("Response body:", response.json())
-    except Exception:
-        print("Non-JSON response:", response.text)
+            print("Document to send:", payload)
+            print("Sending payload to gateway...")
+
+            try:
+                response = requests.post(f"http://{VPN_IP}:8000/receive", json=payload)
+                print("Payload sent:", payload)
+                print("Response status:", response.status_code)
+
+                try:
+                    print("Response body:", response.json())
+                except Exception:
+                    print("Non-JSON response:", response.text)
+
+            except Exception as e:
+                print(f"Error sending payload for {payload}: {e}")
 
 with DAG(
     "scrapy_shards_dag",
@@ -115,8 +122,8 @@ with DAG(
         
     # Task to send data to the gateway
     send_to_gateway = PythonOperator(
-        task_id="send_to_gateway",
-        python_callable=send_post_to_gateway
+        task_id="send_ids_to_rabbit",
+        python_callable=send_post_to_rabbit
     )
     # END
     end = EmptyOperator(task_id="end")

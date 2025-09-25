@@ -8,4 +8,4 @@ logs/*
 !logs/.gitkeep
 
 # Ignorar archivos .env
-.env
+# .env
