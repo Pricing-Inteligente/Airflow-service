@@ -30,24 +30,34 @@ MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD p
 total_shards = 3
 image_name = "giancass07/scrapy-app:v1.1"
 
-
 def send_to_rabbit(**kwargs):
     client = MongoClient(MONGO_URI)
     db = client[MONGO_PRODUCTS_DB]
 
     RABBIT_HOST = "192.168.40.10"
-    RABBIT_PORT = 8180  # tu puerto expuesto de RabbitMQ
+    RABBIT_PORT = 8180   # este es el puerto que mapearás a 5672 en docker-compose
+    RABBIT_USER = "admin"
+    RABBIT_PASS = "adminpassword"
+    RABBIT_VHOST = "/"   # virtual host por defecto
 
     print(f"=== SENDING TO RABBIT at {RABBIT_HOST}:{RABBIT_PORT} from {MONGO_PRODUCTS_DB}===")
 
+    # Credenciales
+    credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASS)
+
     # Conexión a RabbitMQ
     connection = pika.BlockingConnection(
-        pika.ConnectionParameters(host=RABBIT_HOST, port=RABBIT_PORT)
+        pika.ConnectionParameters(
+            host=RABBIT_HOST,
+            port=RABBIT_PORT,
+            virtual_host=RABBIT_VHOST,
+            credentials=credentials
+        )
     )
     channel = connection.channel()
 
-    # Creamos una cola llamada "mongo_docs"
-    channel.queue_declare(queue="mongo_docs", durable=True)
+    # Creamos una cola llamada "productos_ids"
+    channel.queue_declare(queue="productos_ids", durable=True)
 
     for collection_name in db.list_collection_names():
         collection = db[collection_name]
@@ -65,16 +75,18 @@ def send_to_rabbit(**kwargs):
                 # Enviar a RabbitMQ
                 channel.basic_publish(
                     exchange="",
-                    routing_key="mongo_docs",
+                    routing_key="productos_ids",  # enviamos a la cola productos_ids
                     body=str(payload).encode(),
                     properties=pika.BasicProperties(delivery_mode=2)  # persistente
                 )
-                print("Payload sent to Rabbit:", payload)
+                print("Payload sent to productos_ids:", payload)
 
             except Exception as e:
                 print(f"Error sending payload for {payload}: {e}")
 
     connection.close()
+
+    
 with DAG(
     "scrapy_shards_dag",
     schedule_interval=None,
