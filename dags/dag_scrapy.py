@@ -32,14 +32,15 @@ image_name = "giancass07/scrapy-app:v1.1"
 # Cargar variables de entorno
 load_dotenv()
 VPN_IP = getenv("VPN_IP")
-print("VPN_IP=", VPN_IP)
 
 if not VPN_IP:
     raise ValueError("La variable de entorno 'VPN_IP' no está definida") 
 
-def send_post_to_rabbit(**kwargs):
+def send_post_to_rabbit(VPN_IP, **kwargs):
     client = MongoClient(MONGO_URI)
     db = client[MONGO_PRODUCTS_DB]
+    
+    print("VPN_IP=", VPN_IP)
 
     for collection_name in db.list_collection_names():
         collection = db[collection_name]
