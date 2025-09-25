@@ -11,6 +11,7 @@ from airflow.operators.bash import BashOperator
 from airflow.utils.task_group import TaskGroup
 import requests
 import json
+import pika
 import os
 
 default_args = {
