@@ -29,19 +29,15 @@ MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD p
 total_shards = 3
 image_name = "giancass07/scrapy-app:v1.1"
 
-# Cargar variables de entorno
-load_dotenv()
-VPN_IP = getenv("VPN_IP")
 
-if not VPN_IP:
-    raise ValueError("La variable de entorno 'VPN_IP' no está definida") 
-
-def send_post_to_rabbit(VPN_IP, **kwargs):
+def send_post_to_rabbit(**kwargs):
     client = MongoClient(MONGO_URI)
     db = client[MONGO_PRODUCTS_DB]
     
+    VPN_IP="10.101.137.179"
     print("VPN_IP=", VPN_IP)
 
+    print(f"=== SENDING TO RABBIT from {MONGO_PRODUCTS_DB}===")
     for collection_name in db.list_collection_names():
         collection = db[collection_name]
         print(f"--- Processing collection: {collection_name} ---")
