@@ -25,7 +25,7 @@ IS_PROD = False
 # Conexión a Mongo
 MONGO_URI = "192.168.40.10:8580"
 MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD para productos
-# MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables" # BD para variables
+MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables" # BD para variables
 
 total_shards = 3
 image_name = "giancass07/scrapy-app:v1.2"
