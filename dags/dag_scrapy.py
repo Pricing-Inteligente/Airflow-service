@@ -28,7 +28,7 @@ MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD p
 # MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables" # BD para variables
 
 total_shards = 3
-image_name = "giancass07/scrapy-app:v1.1"
+image_name = "giancass07/scrapy-app:v1.2"
 
 def send_to_rabbit(**kwargs):
     client = MongoClient(MONGO_URI)
