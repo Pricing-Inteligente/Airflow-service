@@ -116,7 +116,7 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "True",
+                "IS_PROD": "False",
                 "MONGO_URI": MONGO_URI,
                 "MONGO_RESTART": "False",
             },
@@ -132,7 +132,7 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "True",
+                "IS_PROD": "False",
                 "MONGO_URI": MONGO_URI,
                 "MONGO_RESTART": "False",
             },
