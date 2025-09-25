@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import psycopg2
 from pymongo import MongoClient
 from os import getenv
 from bson import json_util, ObjectId
@@ -26,9 +27,6 @@ IS_PROD = False
 MONGO_URI = "192.168.40.10:8580"
 MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD para productos
 MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables" # BD para variables
-
-total_shards = 3
-image_name = "giancass07/scrapy-app:v1.2"
 
 def send_to_rabbit(**kwargs):
     client = MongoClient(MONGO_URI)
@@ -86,6 +84,77 @@ def send_to_rabbit(**kwargs):
 
     connection.close()
 
+PG_HOST =  "192.168.40.10"
+PG_PORT = 80
+PG_DB   = "mydb"
+PG_USER = "admin"
+PG_PASS = "adminpassword"
+MONGO_CLEAN_DB = "clean_productos"
+
+def mongo_to_pg(**kwargs):
+    # Conexión a Mongo
+    client = MongoClient(MONGO_URI)
+    db = client[MONGO_CLEAN_DB]
+    collection = db['clean_docs']  # Ejemplo: colección arroz
+
+    # Conexión a PostgreSQL
+    conn = psycopg2.connect(
+        host=PG_HOST,
+        port=PG_PORT,
+        dbname=PG_DB,
+        user=PG_USER,
+        password=PG_PASS
+    )
+    cur = conn.cursor()
+
+    # Crear tabla si no existe
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS productos_clean_fields (
+            _id TEXT PRIMARY KEY,
+            nombre TEXT,
+            marca TEXT,
+            precio TEXT,
+            referencia TEXT,
+            cantidad TEXT,
+            unidad TEXT,
+            descripcion TEXT
+        )
+    """)
+
+    for doc in collection.find({}):
+        clean = doc.get('clean_fields', {})
+        if not clean:
+            continue
+
+        cur.execute("""
+            INSERT INTO productos_clean_fields (_id, nombre, marca, precio, referencia, cantidad, unidad, descripcion)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (_id) DO UPDATE SET
+                nombre = EXCLUDED.nombre,
+                marca = EXCLUDED.marca,
+                precio = EXCLUDED.precio,
+                referencia = EXCLUDED.referencia,
+                cantidad = EXCLUDED.cantidad,
+                unidad = EXCLUDED.unidad,
+                descripcion = EXCLUDED.descripcion
+        """, (
+            str(doc.get('_id')),
+            clean.get('nombre'),
+            clean.get('marca'),
+            clean.get('precio'),
+            clean.get('referencia'),
+            clean.get('cantidad'),
+            clean.get('unidad'),
+            clean.get('descripcion')
+        ))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+
+total_shards = 3
+image_name = "giancass07/scrapy-app:v1.2"
     
 with DAG(
     "scrapy_shards_dag",
@@ -141,11 +210,11 @@ with DAG(
         )
         
     # Task to send data to the gateway
-    send_to_gateway = PythonOperator(
+    queue_to_rabbit = PythonOperator(
         task_id="send_ids_to_rabbit",
         python_callable=send_to_rabbit
     )
     # END
     end = EmptyOperator(task_id="end")
 
-    start >> pull_image >> scraping_group >> send_to_gateway >> end
+    start >> pull_image >> scraping_group >> queue_to_rabbit >> end
