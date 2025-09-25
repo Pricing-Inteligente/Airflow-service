@@ -86,7 +86,7 @@ def send_to_rabbit(**kwargs):
     connection.close()
 
 PG_HOST =  "192.168.40.10"
-PG_PORT = 80
+PG_PORT = 8080
 PG_DB   = "mydb"
 PG_USER = "admin"
 PG_PASS = "adminpassword"
