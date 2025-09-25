@@ -57,7 +57,7 @@ def send_to_rabbit(**kwargs):
     # Creamos una cola llamada "productos_ids"
     channel.queue_declare(queue="productos_ids", durable=True)
 
-    for collection_name in db.list_collection_names():
+    for collection_name in reversed(db.list_collection_names()):
         collection = db[collection_name]
         print(f"--- Processing collection: {collection_name} ---")
 
