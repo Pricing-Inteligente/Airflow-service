@@ -21,9 +21,9 @@ default_args = {
 }
 
 IS_PROD = False
-
+VM_INSIDE_IP = "192.168.40.10"
 # Conexión a Mongo
-MONGO_URI = "192.168.40.10:8580"
+MONGO_URI = f"{VM_INSIDE_IP}:8580"
 MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD para productos
 # MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables" # BD para variables
 
@@ -116,9 +116,14 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "False",
+                "IS_PROD": "True",
                 "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": "False",
+                "MONGO_RESTART": "True",
+                # -------------------------------
+                "FLARESOLVERR_URL": f"http://{VM_INSIDE_IP}:8191",
+                "MONGO_URI": "mongodb://host.docker.internal:27017/bodies_scraping",
+                "SB_HEADLESS": "1",
+                "SB_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu --window-size=1920,1080",
             },
         ).expand(
             command=[f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
@@ -135,6 +140,11 @@ with DAG(
                 "IS_PROD": "True",
                 "MONGO_URI": MONGO_URI,
                 "MONGO_RESTART": "True",
+                # -------------------------------
+                "FLARESOLVERR_URL": f"http://{VM_INSIDE_IP}:8191",
+                "MONGO_URI": "mongodb://host.docker.internal:27017/bodies_scraping",
+                "SB_HEADLESS": "1",
+                "SB_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu --window-size=1920,1080",
             },
         ).expand(
             command=[f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
