@@ -4,6 +4,6 @@ RUN pip install --no-cache-dir \
     lxml \
     dotenv \
     pymongo \
-    psycopg2 \
+    psycopg2-binary \
     requests \
     pika
