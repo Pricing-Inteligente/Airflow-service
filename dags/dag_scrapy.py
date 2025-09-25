@@ -58,6 +58,7 @@ def send_to_rabbit(**kwargs):
     channel.queue_declare(queue="productos_ids", durable=True)
 
     for collection_name in reversed(db.list_collection_names()):
+        print(f"Amount of collections: {len(db.list_collection_names())}")
         collection = db[collection_name]
         print(f"--- Processing collection: {collection_name} ---")
 
