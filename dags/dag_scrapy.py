@@ -132,9 +132,9 @@ with DAG(
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             environment={
-                "IS_PROD": "True",
+                "IS_PROD": "False",
                 "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": "True",
+                "MONGO_RESTART": "False",
             },
         ).expand(
             command=[f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
