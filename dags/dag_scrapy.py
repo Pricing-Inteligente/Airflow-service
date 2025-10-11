@@ -155,7 +155,7 @@ def mongo_to_pg(**kwargs):
     
 
 total_shards = 3
-image_name = "giancass07/scrapy-app:v1.2"
+image_name = "giancass07/scrapy-app:latest"
     
 with DAG(
     "scrapy_shards_dag",
