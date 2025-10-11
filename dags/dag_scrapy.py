@@ -21,7 +21,7 @@ default_args = {
     "retry_delay": timedelta(minutes=1)
 }
 
-IS_PROD = True
+IS_PROD = False
 
 # Conexión a Mongo
 MONGO_URI = "192.168.40.10:8580"
