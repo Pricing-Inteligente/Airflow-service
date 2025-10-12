@@ -156,6 +156,7 @@ def mongo_productos_to_pg(**kwargs):
     )
     cur = conn.cursor()
 
+    # Crear tabla si no existe, agregando fecha
     cur.execute("""
         CREATE TABLE IF NOT EXISTS productos_clean_fields (
             _id TEXT PRIMARY KEY,
@@ -165,7 +166,8 @@ def mongo_productos_to_pg(**kwargs):
             referencia TEXT,
             cantidad TEXT,
             unidad TEXT,
-            descripcion TEXT
+            descripcion TEXT,
+            fecha TEXT
         )
     """)
 
@@ -174,9 +176,12 @@ def mongo_productos_to_pg(**kwargs):
         if not clean:
             continue
 
+        # Obtener fecha actual en formato yy.mm.dd.hh
+        fecha = datetime.now().strftime("%y.%m.%d.%H")
+
         cur.execute("""
-            INSERT INTO productos_clean_fields (_id, nombre, marca, precio, referencia, cantidad, unidad, descripcion)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO productos_clean_fields (_id, nombre, marca, precio, referencia, cantidad, unidad, descripcion, fecha)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (_id) DO UPDATE SET
                 nombre = EXCLUDED.nombre,
                 marca = EXCLUDED.marca,
@@ -184,7 +189,8 @@ def mongo_productos_to_pg(**kwargs):
                 referencia = EXCLUDED.referencia,
                 cantidad = EXCLUDED.cantidad,
                 unidad = EXCLUDED.unidad,
-                descripcion = EXCLUDED.descripcion
+                descripcion = EXCLUDED.descripcion,
+                fecha = EXCLUDED.fecha
         """, (
             str(doc.get('_id')),
             clean.get('nombre'),
@@ -193,14 +199,14 @@ def mongo_productos_to_pg(**kwargs):
             clean.get('referencia'),
             clean.get('cantidad'),
             clean.get('unidad'),
-            clean.get('descripcion')
+            clean.get('descripcion'),
+            fecha
         ))
 
     conn.commit()
     cur.close()
     conn.close()
-    print("Productos saved to PostgreSQL.")
-
+    print("Productos saved to PostgreSQL with fecha.")
 
 def mongo_variables_to_pg(**kwargs):
     wait_for_queue_empty("variables_ids")
@@ -218,12 +224,14 @@ def mongo_variables_to_pg(**kwargs):
     )
     cur = conn.cursor()
 
+    # Crear tabla si no existe
     cur.execute("""
         CREATE TABLE IF NOT EXISTS variables_clean_fields (
             _id TEXT PRIMARY KEY,
             nombre TEXT,
-            tipo TEXT,
-            valor TEXT
+            valor TEXT,
+            pais TEXT,
+            fecha TEXT
         )
     """)
 
@@ -232,24 +240,29 @@ def mongo_variables_to_pg(**kwargs):
         if not clean:
             continue
 
+        # Obtener fecha actual en formato yy.mm.dd.hh
+        fecha = datetime.now().strftime("%y.%m.%d.%H")
+
         cur.execute("""
-            INSERT INTO variables_clean_fields (_id, nombre, tipo, valor)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO variables_clean_fields (_id, nombre, valor, pais, fecha)
+            VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (_id) DO UPDATE SET
                 nombre = EXCLUDED.nombre,
-                tipo = EXCLUDED.tipo,
-                valor = EXCLUDED.valor
+                valor = EXCLUDED.valor,
+                pais = EXCLUDED.pais,
+                fecha = EXCLUDED.fecha
         """, (
             str(doc.get('_id')),
             clean.get('nombre'),
-            clean.get('tipo'),
-            clean.get('valor')
+            clean.get('valor'),
+            clean.get('pais'),
+            fecha
         ))
 
     conn.commit()
     cur.close()
     conn.close()
-    print("Variables saved to PostgreSQL.")
+    print("Variables saved to PostgreSQL with _id, nombre, valor, pais, fecha.")
     
 
 total_shards = 3
