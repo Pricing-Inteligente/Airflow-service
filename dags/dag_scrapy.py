@@ -1,19 +1,28 @@
-from datetime import datetime, timedelta
+# ---------------- Core ----------------
+import json
+import os
+import time
+from datetime import datetime
+from datetime import timedelta
+
+# ---------------- External ----------------
+import pika
 import psycopg2
-from pymongo import MongoClient
-from os import getenv
-from bson import json_util, ObjectId
+import requests
 from dotenv import load_dotenv
+from bson import json_util
+from bson import ObjectId
+from pymongo import MongoClient
+
+# ---------------- Airflow ----------------
 from airflow import DAG
-from airflow.providers.docker.operators.docker import DockerOperator
+from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
-from airflow.operators.bash import BashOperator
+from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.utils.task_group import TaskGroup
-import requests
-import json
-import pika
-import os
+from airflow.utils.trigger_rule import TriggerRule
+
 
 default_args = {
     "start_date": datetime(2025, 9, 6),
@@ -23,22 +32,34 @@ default_args = {
 
 IS_PROD = False
 
-# Conexión a Mongo
+# ---------------- MongoDB ----------------
 MONGO_URI = "192.168.40.10:8580"
-MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos" # BD para productos
-MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables" # BD para variables
+MONGO_PRODUCTS_DB  = "raw_productos" if IS_PROD else "TEST_raw_productos"  # BD para productos
+MONGO_VARIABLES_DB = "raw_variables" if IS_PROD else "TEST_raw_variables"  # BD para variables
+
+MONGO_CLEAN_DB = "clean_productos"
+MONGO_CLEAN_VAR_DB = "clean_variables"
+
+# ---------------- RabbitMQ ----------------
+RABBIT_HOST = "192.168.40.10"
+RABBIT_PORT = 8180   # puerto mappeado a 5672 en docker
+RABBIT_USER = "admin"
+RABBIT_PASS = "adminpassword"
+RABBIT_VHOST = "/"   # virtual host por defecto
+
+# ---------------- PostgreSQL ----------------
+PG_HOST =  "192.168.40.10"
+PG_PORT = 8080
+PG_DB   = "mydb"
+PG_USER = "admin"
+PG_PASS = "adminpassword"
+
+#-----------------------------------------------------------
 
 def send_to_rabbit(**kwargs):
-    client = MongoClient(MONGO_URI)
-    db = client[MONGO_PRODUCTS_DB]
 
-    RABBIT_HOST = "192.168.40.10"
-    RABBIT_PORT = 8180   # este es el puerto que mapearás a 5672 en docker-compose
-    RABBIT_USER = "admin"
-    RABBIT_PASS = "adminpassword"
-    RABBIT_VHOST = "/"   # virtual host por defecto
 
-    print(f"=== SENDING TO RABBIT at {RABBIT_HOST}:{RABBIT_PORT} from {MONGO_PRODUCTS_DB}===")
+    print(f"=== SENDING TO RABBIT at {RABBIT_HOST}:{RABBIT_PORT} ===")
 
     # Credenciales
     credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASS)
@@ -53,52 +74,79 @@ def send_to_rabbit(**kwargs):
         )
     )
     channel = connection.channel()
-
-    # Creamos una cola llamada "productos_ids"
+    client = MongoClient(MONGO_URI)
+    
+    # ---------------- Productos ----------------
+    db_products = client[MONGO_PRODUCTS_DB]
     channel.queue_declare(queue="productos_ids", durable=True)
 
-    for collection_name in reversed(db.list_collection_names()):
-        print(f"Amount of collections: {len(db.list_collection_names())}")
-        collection = db[collection_name]
-        print(f"--- Processing collection: {collection_name} ---")
+    # ---------------- Enviar productos ----------------
+    for collection_name in reversed(db_products.list_collection_names()):
+        collection = db_products[collection_name]
+        print(f"--- Processing productos collection: {collection_name} ---")
 
-        for doc in collection.find({}, {"_id": 1}):  # fetch only _id
-            payload = {
-                "collection": collection_name,
-                "_id": str(doc["_id"])
-            }
-
-            print("Document to send:", payload)
-
+        for doc in collection.find({}, {"_id": 1}):
+            payload = {"collection": collection_name, "_id": str(doc["_id"])}
             try:
-                # Enviar a RabbitMQ
                 channel.basic_publish(
                     exchange="",
-                    routing_key="productos_ids",  # enviamos a la cola productos_ids
+                    routing_key="productos_ids",
                     body=str(payload).encode(),
-                    properties=pika.BasicProperties(delivery_mode=2)  # persistente
+                    properties=pika.BasicProperties(delivery_mode=2)
                 )
-                print("Payload sent to productos_ids:", payload)
-
+                print("Producto sent:", payload)
             except Exception as e:
-                print(f"Error sending payload for {payload}: {e}")
+                print(f"Error sending producto payload {payload}: {e}")
+                
+    # ---------------- Variables ----------------
+    db_variables = client[MONGO_VARIABLES_DB]
+    channel.queue_declare(queue="variables_ids", durable=True)
+
+    # ---------------- Enviar variables ----------------
+    for collection_name in reversed(db_variables.list_collection_names()):
+        collection = db_variables[collection_name]
+        print(f"--- Processing variables collection: {collection_name} ---")
+
+        for doc in collection.find({}, {"_id": 1}):
+            payload = {"collection": collection_name, "_id": str(doc["_id"])}
+            try:
+                channel.basic_publish(
+                    exchange="",
+                    routing_key="variables_ids",
+                    body=str(payload).encode(),
+                    properties=pika.BasicProperties(delivery_mode=2)
+                )
+                print("Variable sent:", payload)
+            except Exception as e:
+                print(f"Error sending variable payload {payload}: {e}")
 
     connection.close()
+    
+# ---------------- HELPER ----------------
+def wait_for_queue_empty(queue_name):
+    credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASS)
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host=RABBIT_HOST, port=RABBIT_PORT, credentials=credentials)
+    )
+    channel = connection.channel()
+    print(f"Waiting for queue '{queue_name}' to be empty...")
+    while True:
+        count = channel.queue_declare(queue=queue_name, passive=True).method.message_count
+        if count == 0:
+            print(f"Queue '{queue_name}' is empty, proceeding...")
+            break
+        print(f"Queue '{queue_name}' has {count} messages, waiting 5s...")
+        time.sleep(5)
+    connection.close()
+#------------------------------------------
 
-PG_HOST =  "192.168.40.10"
-PG_PORT = 8080
-PG_DB   = "mydb"
-PG_USER = "admin"
-PG_PASS = "adminpassword"
-MONGO_CLEAN_DB = "clean_productos"
+def mongo_productos_to_pg(**kwargs):
+    wait_for_queue_empty("productos_ids")
 
-def mongo_to_pg(**kwargs):
-    # Conexión a Mongo
     client = MongoClient(MONGO_URI)
-    db = client[MONGO_CLEAN_DB]
-    collection = db['clean_docs']  # Ejemplo: colección arroz
+    db = client["clean_productos"]
+    collection = db["clean_docs"]
 
-    # Conexión a PostgreSQL
     conn = psycopg2.connect(
         host=PG_HOST,
         port=PG_PORT,
@@ -108,7 +156,6 @@ def mongo_to_pg(**kwargs):
     )
     cur = conn.cursor()
 
-    # Crear tabla si no existe
     cur.execute("""
         CREATE TABLE IF NOT EXISTS productos_clean_fields (
             _id TEXT PRIMARY KEY,
@@ -152,6 +199,57 @@ def mongo_to_pg(**kwargs):
     conn.commit()
     cur.close()
     conn.close()
+    print("Productos saved to PostgreSQL.")
+
+
+def mongo_variables_to_pg(**kwargs):
+    wait_for_queue_empty("variables_ids")
+
+    client = MongoClient(MONGO_URI)
+    db = client["clean_variables"]
+    collection = db["clean_docs"]
+
+    conn = psycopg2.connect(
+        host=PG_HOST,
+        port=PG_PORT,
+        dbname=PG_DB,
+        user=PG_USER,
+        password=PG_PASS
+    )
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS variables_clean_fields (
+            _id TEXT PRIMARY KEY,
+            nombre TEXT,
+            tipo TEXT,
+            valor TEXT
+        )
+    """)
+
+    for doc in collection.find({}):
+        clean = doc.get('clean_fields', {})
+        if not clean:
+            continue
+
+        cur.execute("""
+            INSERT INTO variables_clean_fields (_id, nombre, tipo, valor)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (_id) DO UPDATE SET
+                nombre = EXCLUDED.nombre,
+                tipo = EXCLUDED.tipo,
+                valor = EXCLUDED.valor
+        """, (
+            str(doc.get('_id')),
+            clean.get('nombre'),
+            clean.get('tipo'),
+            clean.get('valor')
+        ))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("Variables saved to PostgreSQL.")
     
 
 total_shards = 3
@@ -210,18 +308,26 @@ with DAG(
             command=[f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={total_shards}" for shard in shards]
         )
         
-    # Task to send data to the gateway
+    # Task to send data to the worker 
     queue_to_rabbit = PythonOperator(
         task_id="send_ids_to_rabbit",
         python_callable=send_to_rabbit
     )
     
-    # Task to save cleaned data to PostgreSQL
-    save_to_postgres = PythonOperator(
-        task_id="mongo_to_postgres",
-        python_callable=mongo_to_pg
+    # Tasks to save cleaned data to PostgreSQL
+    task_productos = PythonOperator(
+        task_id="mongo_productos_to_pg",
+        python_callable=mongo_productos_to_pg
     )
+    task_variables = PythonOperator(
+        task_id="mongo_variables_to_pg",
+        python_callable=mongo_variables_to_pg
+    )
+    
     # END
-    end = EmptyOperator(task_id="end")
+    end = EmptyOperator(
+        task_id="end",
+        trigger_rule=TriggerRule.ONE_SUCCESS
+        )
 
-    start >> pull_image >> scraping_group >> queue_to_rabbit >> save_to_postgres >> end
+    start >> pull_image >> scraping_group >> queue_to_rabbit >> [task_variables, task_productos] >> end
