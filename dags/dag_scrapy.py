@@ -135,8 +135,8 @@ def wait_for_queue_empty(queue_name):
         if count == 0:
             print(f"Queue '{queue_name}' is empty, proceeding...")
             break
-        print(f"Queue '{queue_name}' has {count} messages, waiting 5s...")
-        time.sleep(5)
+        print(f"Queue '{queue_name}' has {count} messages, waiting 10m...")
+        time.sleep(600)  # Espera 10 minutos antes de volver a comprobar
     connection.close()
 #------------------------------------------
 
