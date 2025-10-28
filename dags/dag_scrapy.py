@@ -354,7 +354,7 @@ with DAG(
             },
         ).expand(
             command=[
-                f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={total_shards}"
+                f"with-xvfb scrapy crawl simple_product_spider -a shard={shard} -a total_shards={total_shards}"
                 for shard in shards
             ]
         )
