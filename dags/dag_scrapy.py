@@ -31,6 +31,7 @@ default_args = {
 }
 
 IS_PROD = True
+MONGO_RESTART = False
 
 # ---------------- MongoDB ----------------
 MONGO_URI = "192.168.40.10:8580"
@@ -344,13 +345,14 @@ with DAG(
             task_id="product_scraping_task",
             image=image_name,
             api_version="auto",
-            auto_remove="force",
+            auto_remove=True,
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
+            mount_tmp_dir=False,
             environment={
                 "IS_PROD": IS_PROD,
                 "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": "False",
+                "MONGO_RESTART": MONGO_RESTART,
             },
         ).expand(
             command=[
@@ -363,13 +365,14 @@ with DAG(
             task_id="variable_scraping_task",
             image=image_name,
             api_version="auto",
-            auto_remove="force",
+            auto_remove=True,
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
+            mount_tmp_dir=False,
             environment={
                 "IS_PROD": IS_PROD,
                 "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": "False",
+                "MONGO_RESTART": MONGO_RESTART,
             },
         ).expand(
             command=[
