@@ -30,7 +30,7 @@ default_args = {
     "retry_delay": timedelta(minutes=1),
 }
 
-IS_PROD = False
+IS_PROD = True
 MONGO_RESTART = False
 
 # ---------------- MongoDB ----------------
