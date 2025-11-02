@@ -31,7 +31,7 @@ default_args = {
 }
 
 IS_PROD = True
-MONGO_RESTART = False
+MONGO_RESTART = True
 
 # ---------------- MongoDB ----------------
 MONGO_URI = "192.168.40.10:8580"
