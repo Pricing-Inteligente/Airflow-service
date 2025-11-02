@@ -33,6 +33,11 @@ default_args = {
 IS_PROD = True
 MONGO_RESTART = True
 
+# ---------------- RabbitMQ Wait Control ----------------
+# Si es True, esperará a que las colas de RabbitMQ estén vacías antes de migrar a PostgreSQL
+# Si es False, migrará inmediatamente sin esperar (útil para ejecución manual)
+WAIT_FOR_RABBIT = False  # Cambiar a True si quieres esperar automáticamente (puede tomar ~15 hrs)
+
 # ---------------- MongoDB ----------------
 MONGO_URI = "192.168.40.10:8580"
 MONGO_PRODUCTS_DB = (
@@ -130,6 +135,13 @@ def send_to_rabbit(**kwargs):
 
 # ---------------- HELPER ----------------
 def wait_for_queue_empty(queue_name):
+    """
+    Espera indefinidamente a que una cola de RabbitMQ esté vacía.
+    Verifica cada 10 minutos.
+    
+    Args:
+        queue_name: Nombre de la cola a monitorear
+    """
     credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASS)
     connection = pika.BlockingConnection(
         pika.ConnectionParameters(
@@ -137,16 +149,25 @@ def wait_for_queue_empty(queue_name):
         )
     )
     channel = connection.channel()
-    print(f"Waiting for queue '{queue_name}' to be empty...")
+    
+    start_time = time.time()
+    print(f"⏳ Esperando a que la cola '{queue_name}' esté vacía...")
+    
     while True:
         count = channel.queue_declare(
             queue=queue_name, passive=True
         ).method.message_count
+        
         if count == 0:
-            print(f"Queue '{queue_name}' is empty, proceeding...")
-            break
-        print(f"Queue '{queue_name}' has {count} messages, waiting 10m...")
+            elapsed_hours = (time.time() - start_time) / 3600
+            print(f"✅ Cola '{queue_name}' vacía. Tiempo total de espera: {elapsed_hours:.2f} horas")
+            connection.close()
+            return
+        
+        elapsed_hours = (time.time() - start_time) / 3600
+        print(f"📊 Cola '{queue_name}': {count:,} mensajes restantes (esperando {elapsed_hours:.2f}h)")
         time.sleep(600)  # Espera 10 minutos antes de volver a comprobar
+    
     connection.close()
 
 
@@ -157,7 +178,15 @@ def wait_for_queue_empty(queue_name):
 # Y que existe la función wait_for_queue_empty(nombre_cola)
 
 def mongo_productos_to_pg(**kwargs):
-    wait_for_queue_empty("productos_ids")
+    """
+    Migra productos limpiados desde MongoDB a PostgreSQL.
+    Si WAIT_FOR_RABBIT=True, espera a que la cola de RabbitMQ esté vacía (puede tomar ~15 hrs).
+    """
+    if WAIT_FOR_RABBIT:
+        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola 'productos_ids' (puede tomar varias horas)...")
+        wait_for_queue_empty("productos_ids")
+    else:
+        print(f"🐰 WAIT_FOR_RABBIT=False: Saltando espera de RabbitMQ, procediendo directamente a PostgreSQL")
 
     client = MongoClient(MONGO_URI)
     db = client["clean_productos"]
@@ -256,7 +285,15 @@ def mongo_productos_to_pg(**kwargs):
 
 
 def mongo_variables_to_pg(**kwargs):
-    wait_for_queue_empty("variables_ids")
+    """
+    Migra variables limpiadas desde MongoDB a PostgreSQL.
+    Si WAIT_FOR_RABBIT=True, espera a que la cola de RabbitMQ esté vacía (puede tomar ~15 hrs).
+    """
+    if WAIT_FOR_RABBIT:
+        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola 'variables_ids' (puede tomar varias horas)...")
+        wait_for_queue_empty("variables_ids")
+    else:
+        print(f"🐰 WAIT_FOR_RABBIT=False: Saltando espera de RabbitMQ, procediendo directamente a PostgreSQL")
 
     client = MongoClient(MONGO_URI)
     db = client["clean_variables"]
