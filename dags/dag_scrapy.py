@@ -58,6 +58,50 @@ with DAG(
     )
     
     # ============================================================
+    # MongoDB Cleanup Task (antes de scraping paralelo)
+    # ============================================================
+    def clean_mongodb(**kwargs):
+        """Limpia MongoDB antes de scraping si MONGO_RESTART=True"""
+        if not settings.MONGO_RESTART:
+            print("MONGO_RESTART=False, saltando limpieza")
+            return
+        
+        from pymongo import MongoClient
+        client = MongoClient(settings.MONGO_URI)
+        
+        # Limpiar BD de productos
+        db_products_name = settings.MONGO_PRODUCTS_DB
+        db_products = client[db_products_name]
+        
+        print(f"[clean_mongodb] MONGO_RESTART=True: Borrando colecciones en {db_products_name}")
+        collections = db_products.list_collection_names()
+        print(f"[clean_mongodb] Encontradas {len(collections)} colecciones")
+        
+        for collection_name in collections:
+            db_products[collection_name].drop()
+            print(f"[clean_mongodb] Dropped: {collection_name}")
+        
+        # Limpiar BD de variables
+        db_variables_name = settings.MONGO_VARIABLES_DB
+        db_variables = client[db_variables_name]
+        
+        print(f"[clean_mongodb] Borrando colecciones en {db_variables_name}")
+        collections_var = db_variables.list_collection_names()
+        print(f"[clean_mongodb] Encontradas {len(collections_var)} colecciones")
+        
+        for collection_name in collections_var:
+            db_variables[collection_name].drop()
+            print(f"[clean_mongodb] Dropped: {collection_name}")
+        
+        client.close()
+        print(f"[clean_mongodb] ✅ MongoDB limpiado: {db_products_name}, {db_variables_name}")
+    
+    clean_mongo_task = PythonOperator(
+        task_id="clean_mongodb",
+        python_callable=clean_mongodb
+    )
+    
+    # ============================================================
     # Scraping Group
     # ============================================================
     with TaskGroup("scraping_group") as scraping_group:
@@ -196,6 +240,7 @@ with DAG(
     (
         start
         >> pull_image
+        >> clean_mongo_task  # Limpiar MongoDB antes de scraping paralelo
         >> scraping_group
         >> queue_to_rabbit
         >> [task_variables, task_productos]
