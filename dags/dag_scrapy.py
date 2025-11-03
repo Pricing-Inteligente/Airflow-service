@@ -1,21 +1,7 @@
-# ---------------- Core ----------------
-import json
-import os
-import time
-from datetime import datetime
-from datetime import timedelta
-
-# ---------------- External ----------------
-import pandas as pd
-import pika
-import psycopg2
-import requests
-from dotenv import load_dotenv
-from bson import json_util
-from bson import ObjectId
-from pymongo import MongoClient
-
-# ---------------- Airflow ----------------
+# ============================================================
+# DAG Principal - Scrapy Shards with Retail-based Structure
+# ============================================================
+from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
@@ -24,434 +10,84 @@ from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.utils.task_group import TaskGroup
 from airflow.utils.trigger_rule import TriggerRule
 
+# Importar configuraciones y utilidades
+from config.retailers import RETAILERS
+from config import settings
+from utils.rabbit_utils import send_to_rabbit
+from utils.postgres_utils import mongo_productos_to_pg, mongo_variables_to_pg
 
+
+# ============================================================
+# Configuración del DAG
+# ============================================================
 default_args = {
     "start_date": datetime(2025, 9, 6),
     "retries": 3,
     "retry_delay": timedelta(minutes=1),
 }
 
-IS_PROD = True
-MONGO_RESTART = True
-
-# ---------------- RabbitMQ Wait Control ----------------
-# Si es True, esperará a que las colas de RabbitMQ estén vacías antes de migrar a PostgreSQL
-# Si es False, migrará inmediatamente sin esperar (útil para ejecución manual)
-WAIT_FOR_RABBIT = False  # Cambiar a True si quieres esperar automáticamente (puede tomar ~15 hrs)
-
-# ---------------- Retail-based Sharding for Products ----------------
-# Set to retail name (e.g., "Chedraui") for debugging single retail, or "all" for production
-DEBUG_RETAIL = "all"
-# Number of workers when DEBUG_RETAIL="all" (batches ~50 retailers into groups)
-PRODUCT_WORKERS = 5
-
-# Variables keep simple numeric sharding
-VARIABLE_SHARDS = 2
-
-# ---------------- MongoDB ----------------
-MONGO_URI = "192.168.40.10:8580"
-
-# NOTA: Con estructura retail-based, las BDs de productos son dinámicas
-# Prefijos para identificar BDs de productos por retail
-MONGO_PRODUCTS_DB_PREFIX = (
-    "raw_productos_playwright_" if IS_PROD else "TEST_raw_productos_playwright_"
-)
-MONGO_VARIABLES_DB = (
-    "raw_variables_playwright" if IS_PROD else "TEST_raw_variables_playwright"
-)
-
-MONGO_CLEAN_DB = "clean_productos"
-MONGO_CLEAN_VAR_DB = "clean_variables"
-
-# ---------------- RabbitMQ ----------------
-RABBIT_HOST = "192.168.40.10"
-RABBIT_PORT = 8180  # puerto mappeado a 5672 en docker
-RABBIT_USER = "admin"
-RABBIT_PASS = "adminpassword"
-RABBIT_VHOST = "/"  # virtual host por defecto
-
-# ---------------- PostgreSQL ----------------
-PG_HOST = "192.168.40.10"
-PG_PORT = 8080
-PG_DB = "mydb"
-PG_USER = "admin"
-PG_PASS = "adminpassword"
-
-# -----------------------------------------------------------
-
-
-def send_to_rabbit(**kwargs):
-
-    print(f"=== SENDING TO RABBIT at {RABBIT_HOST}:{RABBIT_PORT} ===")
-
-    # Credenciales
-    credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASS)
-
-    # Conexión a RabbitMQ
-    connection = pika.BlockingConnection(
-        pika.ConnectionParameters(
-            host=RABBIT_HOST,
-            port=RABBIT_PORT,
-            virtual_host=RABBIT_VHOST,
-            credentials=credentials,
-        )
-    )
-    channel = connection.channel()
-    client = MongoClient(MONGO_URI)
-
-    # ---------------- Productos (Retail-based DBs) ----------------
-    channel.queue_declare(queue="productos_ids", durable=True)
-    
-    # Obtener todas las BDs que empiezan con el prefijo de productos
-    all_dbs = client.list_database_names()
-    product_dbs = [db for db in all_dbs if db.startswith(MONGO_PRODUCTS_DB_PREFIX)]
-    
-    print(f"[send_to_rabbit] Found {len(product_dbs)} retail databases")
-    
-    # Recorrer cada BD de retail
-    for db_name in sorted(product_dbs):
-        db_retail = client[db_name]
-        retail_name = db_name.replace(MONGO_PRODUCTS_DB_PREFIX, "")
-        print(f"\n=== Processing retail DB: {db_name} (retail={retail_name}) ===")
-        
-        # Recorrer cada colección (producto) dentro de la BD del retail
-        for collection_name in reversed(db_retail.list_collection_names()):
-            collection = db_retail[collection_name]
-            doc_count = collection.count_documents({})
-            print(f"--- Processing DB={db_name} collection={collection_name} ({doc_count} docs) ---")
-
-            for doc in collection.find({}, {"_id": 1}):
-                # Payload ahora incluye la BD (retail) y la colección (producto)
-                payload = {
-                    "db": db_name,
-                    "collection": collection_name,
-                    "_id": str(doc["_id"])
-                }
-                try:
-                    channel.basic_publish(
-                        exchange="",
-                        routing_key="productos_ids",
-                        body=str(payload).encode(),
-                        properties=pika.BasicProperties(delivery_mode=2),
-                    )
-                    print(f"Producto sent: db={db_name} col={collection_name} _id={payload['_id']}")
-                except Exception as e:
-                    print(f"Error sending producto payload {payload}: {e}")
-
-    # ---------------- Variables ----------------
-    db_variables = client[MONGO_VARIABLES_DB]
-    channel.queue_declare(queue="variables_ids", durable=True)
-
-    # ---------------- Enviar variables ----------------
-    for collection_name in reversed(db_variables.list_collection_names()):
-        collection = db_variables[collection_name]
-        print(f"--- Processing variables collection: {collection_name} ---")
-
-        for doc in collection.find({}, {"_id": 1}):
-            payload = {"collection": collection_name, "_id": str(doc["_id"])}
-            try:
-                channel.basic_publish(
-                    exchange="",
-                    routing_key="variables_ids",
-                    body=str(payload).encode(),
-                    properties=pika.BasicProperties(delivery_mode=2),
-                )
-                print("Variable sent:", payload)
-            except Exception as e:
-                print(f"Error sending variable payload {payload}: {e}")
-
-    connection.close()
-
-
-# ---------------- HELPER ----------------
-def wait_for_queue_empty(queue_name):
-    """
-    Espera indefinidamente a que una cola de RabbitMQ esté vacía.
-    Verifica cada 10 minutos.
-    
-    Args:
-        queue_name: Nombre de la cola a monitorear
-    """
-    credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASS)
-    connection = pika.BlockingConnection(
-        pika.ConnectionParameters(
-            host=RABBIT_HOST, port=RABBIT_PORT, credentials=credentials
-        )
-    )
-    channel = connection.channel()
-    
-    start_time = time.time()
-    print(f"⏳ Esperando a que la cola '{queue_name}' esté vacía...")
-    
-    while True:
-        count = channel.queue_declare(
-            queue=queue_name, passive=True
-        ).method.message_count
-        
-        if count == 0:
-            elapsed_hours = (time.time() - start_time) / 3600
-            print(f"✅ Cola '{queue_name}' vacía. Tiempo total de espera: {elapsed_hours:.2f} horas")
-            connection.close()
-            return
-        
-        elapsed_hours = (time.time() - start_time) / 3600
-        print(f"📊 Cola '{queue_name}': {count:,} mensajes restantes (esperando {elapsed_hours:.2f}h)")
-        time.sleep(600)  # Espera 10 minutos antes de volver a comprobar
-    
-    connection.close()
-
-
-# ------------------------------------------
-
-# 🔹 Supone que las variables de conexión ya están definidas:
-# MONGO_URI, PG_HOST, PG_PORT, PG_DB, PG_USER, PG_PASS
-# Y que existe la función wait_for_queue_empty(nombre_cola)
-
-def mongo_productos_to_pg(**kwargs):
-    """
-    Migra productos limpiados desde MongoDB a PostgreSQL.
-    Si WAIT_FOR_RABBIT=True, espera a que la cola de RabbitMQ esté vacía (puede tomar ~15 hrs).
-    """
-    if WAIT_FOR_RABBIT:
-        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola 'productos_ids' (puede tomar varias horas)...")
-        wait_for_queue_empty("productos_ids")
-    else:
-        print(f"🐰 WAIT_FOR_RABBIT=False: Saltando espera de RabbitMQ, procediendo directamente a PostgreSQL")
-
-    client = MongoClient(MONGO_URI)
-    db = client["clean_productos"]
-    collection = db["clean_docs"]
-
-    conn = psycopg2.connect(
-        host=PG_HOST, port=PG_PORT, dbname=PG_DB, user=PG_USER, password=PG_PASS
-    )
-    cur = conn.cursor()
-
-    # 🧱 Corrección: faltaban comas y orden correcto de columnas
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS productos_clean_fields (
-            _id TEXT PRIMARY KEY,
-            nombre TEXT,
-            marca TEXT,
-            precio TEXT,
-            referencia TEXT,
-            cantidad TEXT,
-            unidad TEXT,
-            descripcion TEXT,
-            fecha TEXT,
-            categoria TEXT,
-            pais TEXT,
-            retail TEXT
-        )
-    """
-    )
-
-    for doc in collection.find({}):
-        clean = doc.get("clean_fields", {})
-        if not clean:
-            continue
-
-        # Campos desde clean_fields
-        precio = clean.get("precio") or ""
-        referencia = clean.get("referencia") or ""
-        cantidad = clean.get("cantidad") or ""
-        unidad = clean.get("unidad") or ""
-        descripcion = clean.get("descripcion") or ""
-        nombre = clean.get("nombre") or ""
-
-        # Campos desde el root del documento
-        marca = doc.get("marca") or ""
-        pais = doc.get("pais") or ""
-        retail = doc.get("retail") or ""
-        fecha_scraping = doc.get("fecha_scraping")
-        categoria = doc.get("producto") or ""
-
-        # Si no hay fecha, usar actual
-        if not fecha_scraping:
-            fecha_scraping = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # Inserción con manejo de conflicto
-        cur.execute(
-            """
-            INSERT INTO productos_clean_fields (
-                _id, nombre, marca, precio, referencia, cantidad, unidad,
-                descripcion, fecha, categoria, pais, retail
-            )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (_id) DO UPDATE SET
-                nombre = EXCLUDED.nombre,
-                marca = EXCLUDED.marca,
-                precio = EXCLUDED.precio,
-                referencia = EXCLUDED.referencia,
-                cantidad = EXCLUDED.cantidad,
-                unidad = EXCLUDED.unidad,
-                descripcion = EXCLUDED.descripcion,
-                fecha = EXCLUDED.fecha,
-                categoria = EXCLUDED.categoria,
-                pais = EXCLUDED.pais,
-                retail = EXCLUDED.retail
-        """,
-            (
-                str(doc.get("_id")),
-                nombre,
-                marca,
-                precio,
-                referencia,
-                cantidad,
-                unidad,
-                descripcion,
-                fecha_scraping,
-                categoria,
-                pais,
-                retail,
-            ),
-        )
-
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("✅ Productos guardados en PostgreSQL con campos limpios y externos.")
-
-
-def mongo_variables_to_pg(**kwargs):
-    """
-    Migra variables limpiadas desde MongoDB a PostgreSQL.
-    Si WAIT_FOR_RABBIT=True, espera a que la cola de RabbitMQ esté vacía (puede tomar ~15 hrs).
-    """
-    if WAIT_FOR_RABBIT:
-        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola 'variables_ids' (puede tomar varias horas)...")
-        wait_for_queue_empty("variables_ids")
-    else:
-        print(f"🐰 WAIT_FOR_RABBIT=False: Saltando espera de RabbitMQ, procediendo directamente a PostgreSQL")
-
-    client = MongoClient(MONGO_URI)
-    db = client["clean_variables"]
-    collection = db["clean_docs"]
-
-    conn = psycopg2.connect(
-        host=PG_HOST, port=PG_PORT, dbname=PG_DB, user=PG_USER, password=PG_PASS
-    )
-    cur = conn.cursor()
-
-    # 🧱 Creación de tabla limpia
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS variables_clean_fields (
-            _id TEXT PRIMARY KEY,
-            nombre TEXT,
-            valor TEXT,
-            previous TEXT,
-            unit TEXT,
-            pais TEXT,
-            fecha TEXT
-        )
-    """
-    )
-
-    for doc in collection.find({}):
-        clean = doc.get("clean_fields", {})
-        if not clean:
-            continue
-
-        valor = clean.get("Actual") or clean.get("Last") or ""
-        previous = clean.get("Previous") or ""
-        unit = clean.get("Unit") or ""
-        nombre = doc.get("variable") or ""
-        pais = doc.get("pais") or ""
-
-        fecha = datetime.now().strftime("%y.%m.%d.%H")
-
-        cur.execute(
-            """
-            INSERT INTO variables_clean_fields (_id, nombre, valor, previous, unit, pais, fecha)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (_id) DO UPDATE SET
-                nombre = EXCLUDED.nombre,
-                valor = EXCLUDED.valor,
-                previous = EXCLUDED.previous,
-                unit = EXCLUDED.unit,
-                pais = EXCLUDED.pais,
-                fecha = EXCLUDED.fecha
-        """,
-            (str(doc.get("_id")), nombre, valor, previous, unit, pais, fecha),
-        )
-
-    conn.commit()
-    cur.close()
-    conn.close()
-    print(
-        "✅ Variables guardadas en PostgreSQL con _id, nombre, valor, previous, unit, pais, fecha."
-    )
-
 
 # ============================================================
-# Retail Assignment Logic for Products
+# Lógica de Asignación de Retailers
 # ============================================================
-# Read CSV to get unique retailers for products
-csv_path = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..", "..", "scrapy", "scraper_app", "data", "input",
-    "prod" if IS_PROD else "dev",
-    "edaSisPricingInt.csv" if IS_PROD else "edaSisPricingInt2.csv"
-)
+print(f"[DAG] Configuración: {len(RETAILERS)} retailers disponibles")
+print(f"[DAG] DEBUG_RETAIL={settings.DEBUG_RETAIL}, PRODUCT_WORKERS={settings.PRODUCT_WORKERS}")
 
-print(f"[DAG] Reading retailers from: {csv_path}")
-df_retailers = pd.read_csv(csv_path)
-unique_retailers = sorted(df_retailers['Retail'].unique().tolist())
-print(f"[DAG] Found {len(unique_retailers)} unique retailers: {unique_retailers[:5]}...")
-
-# Determine product worker configuration based on DEBUG_RETAIL
-if DEBUG_RETAIL != "all":
+if settings.DEBUG_RETAIL != "all":
     # Debug mode: single retail
-    product_retail_assignments = [[DEBUG_RETAIL]]
-    print(f"[DAG] DEBUG MODE: Processing only retail '{DEBUG_RETAIL}'")
+    product_retail_assignments = [[settings.DEBUG_RETAIL]]
+    print(f"[DAG] DEBUG MODE: Processing only retail '{settings.DEBUG_RETAIL}'")
 else:
     # Production mode: batch retailers across workers
-    batch_size = (len(unique_retailers) + PRODUCT_WORKERS - 1) // PRODUCT_WORKERS
+    batch_size = (len(RETAILERS) + settings.PRODUCT_WORKERS - 1) // settings.PRODUCT_WORKERS
     product_retail_assignments = [
-        unique_retailers[i:i+batch_size] 
-        for i in range(0, len(unique_retailers), batch_size)
+        RETAILERS[i:i+batch_size] 
+        for i in range(0, len(RETAILERS), batch_size)
     ]
     print(f"[DAG] PRODUCTION MODE: {len(product_retail_assignments)} workers, ~{batch_size} retailers each")
     for idx, batch in enumerate(product_retail_assignments):
         print(f"[DAG] Worker {idx}: {len(batch)} retailers - {batch[:3]}...")
 
 # Variable workers (unchanged - numeric sharding)
-variable_shards = list(range(VARIABLE_SHARDS))
+variable_shards = list(range(settings.VARIABLE_SHARDS))
 
-image_name = "sboterop/scrapy-app:latest"
 
+# ============================================================
+# Definición del DAG
+# ============================================================
 with DAG(
     "scrapy_shards_dag",
     schedule_interval=None,
     default_args=default_args,
     catchup=False,
 ) as dag:
-
+    
     # START
     start = EmptyOperator(task_id="start")
-
+    
     # Pull latest Docker image
     pull_image = BashOperator(
-        task_id="pull_latest_image", bash_command=f"docker pull {image_name}"
+        task_id="pull_latest_image",
+        bash_command=f"docker pull {settings.IMAGE_NAME}"
     )
-
-    # Grouping scraping tasks
+    
+    # ============================================================
+    # Scraping Group
+    # ============================================================
     with TaskGroup("scraping_group") as scraping_group:
-        # Product scraping task
+        # Product scraping task - retail-based
         product_scraping_task = DockerOperator.partial(
             task_id="product_scraping_task",
-            image=image_name,
+            image=settings.IMAGE_NAME,
             api_version="auto",
             auto_remove="success",
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             mount_tmp_dir=False,
             environment={
-                "IS_PROD": str(IS_PROD),
-                "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": str(MONGO_RESTART),
+                "IS_PROD": str(settings.IS_PROD),
+                "MONGO_URI": settings.MONGO_URI,
+                "MONGO_RESTART": str(settings.MONGO_RESTART),
             },
         ).expand(
             command=[
@@ -459,43 +95,118 @@ with DAG(
                 for retailers in product_retail_assignments
             ]
         )
-        # Variables scraping task
+        
+        # Variables scraping task - numeric sharding
         variable_scraping_task = DockerOperator.partial(
             task_id="variable_scraping_task",
-            image=image_name,
+            image=settings.IMAGE_NAME,
             api_version="auto",
             auto_remove="success",
             docker_url="unix://var/run/docker.sock",
             network_mode="airflow_net",
             mount_tmp_dir=False,
             environment={
-                "IS_PROD": str(IS_PROD),
-                "MONGO_URI": MONGO_URI,
-                "MONGO_RESTART": str(MONGO_RESTART),
+                "IS_PROD": str(settings.IS_PROD),
+                "MONGO_URI": settings.MONGO_URI,
+                "MONGO_RESTART": str(settings.MONGO_RESTART),
             },
         ).expand(
             command=[
-                f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={VARIABLE_SHARDS}"
+                f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={settings.VARIABLE_SHARDS}"
                 for shard in variable_shards
             ]
         )
-
-    # Task to send data to the worker
+    
+    # ============================================================
+    # RabbitMQ Task
+    # ============================================================
+    def send_to_rabbit_wrapper(**kwargs):
+        """Wrapper para send_to_rabbit con configuración"""
+        return send_to_rabbit(
+            mongo_uri=settings.MONGO_URI,
+            mongo_config={
+                'products_db_prefix': settings.MONGO_PRODUCTS_DB_PREFIX,
+                'variables_db': settings.MONGO_VARIABLES_DB,
+            },
+            rabbit_config={
+                'host': settings.RABBIT_HOST,
+                'port': settings.RABBIT_PORT,
+                'user': settings.RABBIT_USER,
+                'pass': settings.RABBIT_PASS,
+                'vhost': settings.RABBIT_VHOST,
+            }
+        )
+    
     queue_to_rabbit = PythonOperator(
-        task_id="send_ids_to_rabbit", python_callable=send_to_rabbit
+        task_id="send_ids_to_rabbit",
+        python_callable=send_to_rabbit_wrapper
     )
-
-    # Tasks to save cleaned data to PostgreSQL
+    
+    # ============================================================
+    # PostgreSQL Migration Tasks
+    # ============================================================
+    def mongo_productos_to_pg_wrapper(**kwargs):
+        """Wrapper para mongo_productos_to_pg con configuración"""
+        rabbit_config = {
+            'host': settings.RABBIT_HOST,
+            'port': settings.RABBIT_PORT,
+            'user': settings.RABBIT_USER,
+            'pass': settings.RABBIT_PASS,
+        }
+        pg_config = {
+            'host': settings.PG_HOST,
+            'port': settings.PG_PORT,
+            'dbname': settings.PG_DB,
+            'user': settings.PG_USER,
+            'password': settings.PG_PASS,
+        }
+        return mongo_productos_to_pg(
+            mongo_uri=settings.MONGO_URI,
+            mongo_clean_db=settings.MONGO_CLEAN_DB,
+            pg_config=pg_config,
+            wait_for_rabbit_flag=settings.WAIT_FOR_RABBIT,
+            rabbit_config=rabbit_config
+        )
+    
+    def mongo_variables_to_pg_wrapper(**kwargs):
+        """Wrapper para mongo_variables_to_pg con configuración"""
+        rabbit_config = {
+            'host': settings.RABBIT_HOST,
+            'port': settings.RABBIT_PORT,
+            'user': settings.RABBIT_USER,
+            'pass': settings.RABBIT_PASS,
+        }
+        pg_config = {
+            'host': settings.PG_HOST,
+            'port': settings.PG_PORT,
+            'dbname': settings.PG_DB,
+            'user': settings.PG_USER,
+            'password': settings.PG_PASS,
+        }
+        return mongo_variables_to_pg(
+            mongo_uri=settings.MONGO_URI,
+            mongo_clean_var_db=settings.MONGO_CLEAN_VAR_DB,
+            pg_config=pg_config,
+            wait_for_rabbit_flag=settings.WAIT_FOR_RABBIT,
+            rabbit_config=rabbit_config
+        )
+    
     task_productos = PythonOperator(
-        task_id="mongo_productos_to_pg", python_callable=mongo_productos_to_pg
+        task_id="mongo_productos_to_pg",
+        python_callable=mongo_productos_to_pg_wrapper
     )
+    
     task_variables = PythonOperator(
-        task_id="mongo_variables_to_pg", python_callable=mongo_variables_to_pg
+        task_id="mongo_variables_to_pg",
+        python_callable=mongo_variables_to_pg_wrapper
     )
-
+    
     # END
     end = EmptyOperator(task_id="end", trigger_rule=TriggerRule.ONE_SUCCESS)
-
+    
+    # ============================================================
+    # Task Dependencies
+    # ============================================================
     (
         start
         >> pull_image
