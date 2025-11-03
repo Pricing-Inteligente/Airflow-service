@@ -6,6 +6,7 @@ from datetime import datetime
 from datetime import timedelta
 
 # ---------------- External ----------------
+import pandas as pd
 import pika
 import psycopg2
 import requests
@@ -38,14 +39,26 @@ MONGO_RESTART = True
 # Si es False, migrará inmediatamente sin esperar (útil para ejecución manual)
 WAIT_FOR_RABBIT = False  # Cambiar a True si quieres esperar automáticamente (puede tomar ~15 hrs)
 
+# ---------------- Retail-based Sharding for Products ----------------
+# Set to retail name (e.g., "Chedraui") for debugging single retail, or "all" for production
+DEBUG_RETAIL = "all"
+# Number of workers when DEBUG_RETAIL="all" (batches ~50 retailers into groups)
+PRODUCT_WORKERS = 5
+
+# Variables keep simple numeric sharding
+VARIABLE_SHARDS = 2
+
 # ---------------- MongoDB ----------------
 MONGO_URI = "192.168.40.10:8580"
-MONGO_PRODUCTS_DB = (
-    "raw_productos" if IS_PROD else "TEST_raw_productos"
-)  # BD para productos
+
+# NOTA: Con estructura retail-based, las BDs de productos son dinámicas
+# Prefijos para identificar BDs de productos por retail
+MONGO_PRODUCTS_DB_PREFIX = (
+    "raw_productos_playwright_" if IS_PROD else "TEST_raw_productos_playwright_"
+)
 MONGO_VARIABLES_DB = (
-    "raw_variables" if IS_PROD else "TEST_raw_variables"
-)  # BD para variables
+    "raw_variables_playwright" if IS_PROD else "TEST_raw_variables_playwright"
+)
 
 MONGO_CLEAN_DB = "clean_productos"
 MONGO_CLEAN_VAR_DB = "clean_variables"
@@ -86,27 +99,44 @@ def send_to_rabbit(**kwargs):
     channel = connection.channel()
     client = MongoClient(MONGO_URI)
 
-    # ---------------- Productos ----------------
-    db_products = client[MONGO_PRODUCTS_DB]
+    # ---------------- Productos (Retail-based DBs) ----------------
     channel.queue_declare(queue="productos_ids", durable=True)
+    
+    # Obtener todas las BDs que empiezan con el prefijo de productos
+    all_dbs = client.list_database_names()
+    product_dbs = [db for db in all_dbs if db.startswith(MONGO_PRODUCTS_DB_PREFIX)]
+    
+    print(f"[send_to_rabbit] Found {len(product_dbs)} retail databases")
+    
+    # Recorrer cada BD de retail
+    for db_name in sorted(product_dbs):
+        db_retail = client[db_name]
+        retail_name = db_name.replace(MONGO_PRODUCTS_DB_PREFIX, "")
+        print(f"\n=== Processing retail DB: {db_name} (retail={retail_name}) ===")
+        
+        # Recorrer cada colección (producto) dentro de la BD del retail
+        for collection_name in reversed(db_retail.list_collection_names()):
+            collection = db_retail[collection_name]
+            doc_count = collection.count_documents({})
+            print(f"--- Processing DB={db_name} collection={collection_name} ({doc_count} docs) ---")
 
-    # ---------------- Enviar productos ----------------
-    for collection_name in reversed(db_products.list_collection_names()):
-        collection = db_products[collection_name]
-        print(f"--- Processing productos collection: {collection_name} ---")
-
-        for doc in collection.find({}, {"_id": 1}):
-            payload = {"collection": collection_name, "_id": str(doc["_id"])}
-            try:
-                channel.basic_publish(
-                    exchange="",
-                    routing_key="productos_ids",
-                    body=str(payload).encode(),
-                    properties=pika.BasicProperties(delivery_mode=2),
-                )
-                print("Producto sent:", payload)
-            except Exception as e:
-                print(f"Error sending producto payload {payload}: {e}")
+            for doc in collection.find({}, {"_id": 1}):
+                # Payload ahora incluye la BD (retail) y la colección (producto)
+                payload = {
+                    "db": db_name,
+                    "collection": collection_name,
+                    "_id": str(doc["_id"])
+                }
+                try:
+                    channel.basic_publish(
+                        exchange="",
+                        routing_key="productos_ids",
+                        body=str(payload).encode(),
+                        properties=pika.BasicProperties(delivery_mode=2),
+                    )
+                    print(f"Producto sent: db={db_name} col={collection_name} _id={payload['_id']}")
+                except Exception as e:
+                    print(f"Error sending producto payload {payload}: {e}")
 
     # ---------------- Variables ----------------
     db_variables = client[MONGO_VARIABLES_DB]
@@ -355,7 +385,41 @@ def mongo_variables_to_pg(**kwargs):
     )
 
 
-total_shards = 3
+# ============================================================
+# Retail Assignment Logic for Products
+# ============================================================
+# Read CSV to get unique retailers for products
+csv_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "..", "scrapy", "scraper_app", "data", "input",
+    "prod" if IS_PROD else "dev",
+    "edaSisPricingInt.csv" if IS_PROD else "edaSisPricingInt2.csv"
+)
+
+print(f"[DAG] Reading retailers from: {csv_path}")
+df_retailers = pd.read_csv(csv_path)
+unique_retailers = sorted(df_retailers['Retail'].unique().tolist())
+print(f"[DAG] Found {len(unique_retailers)} unique retailers: {unique_retailers[:5]}...")
+
+# Determine product worker configuration based on DEBUG_RETAIL
+if DEBUG_RETAIL != "all":
+    # Debug mode: single retail
+    product_retail_assignments = [[DEBUG_RETAIL]]
+    print(f"[DAG] DEBUG MODE: Processing only retail '{DEBUG_RETAIL}'")
+else:
+    # Production mode: batch retailers across workers
+    batch_size = (len(unique_retailers) + PRODUCT_WORKERS - 1) // PRODUCT_WORKERS
+    product_retail_assignments = [
+        unique_retailers[i:i+batch_size] 
+        for i in range(0, len(unique_retailers), batch_size)
+    ]
+    print(f"[DAG] PRODUCTION MODE: {len(product_retail_assignments)} workers, ~{batch_size} retailers each")
+    for idx, batch in enumerate(product_retail_assignments):
+        print(f"[DAG] Worker {idx}: {len(batch)} retailers - {batch[:3]}...")
+
+# Variable workers (unchanged - numeric sharding)
+variable_shards = list(range(VARIABLE_SHARDS))
+
 image_name = "sboterop/scrapy-app:latest"
 
 with DAG(
@@ -364,8 +428,6 @@ with DAG(
     default_args=default_args,
     catchup=False,
 ) as dag:
-
-    shards = list(range(total_shards))
 
     # START
     start = EmptyOperator(task_id="start")
@@ -393,8 +455,8 @@ with DAG(
             },
         ).expand(
             command=[
-                f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={total_shards}"
-                for shard in shards
+                f"scrapy crawl simple_product_spider -a retailers={','.join(retailers)}"
+                for retailers in product_retail_assignments
             ]
         )
         # Variables scraping task
@@ -413,8 +475,8 @@ with DAG(
             },
         ).expand(
             command=[
-                f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={total_shards}"
-                for shard in shards
+                f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={VARIABLE_SHARDS}"
+                for shard in variable_shards
             ]
         )
 
