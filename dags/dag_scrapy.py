@@ -91,7 +91,7 @@ with DAG(
             },
         ).expand(
             command=[
-                f"scrapy crawl simple_product_spider -a retailers={','.join(retailers)}"
+                f"scrapy crawl simple_product_spider -a retailers='{','.join(retailers)}'"
                 for retailers in product_retail_assignments
             ]
         )
