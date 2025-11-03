@@ -31,10 +31,9 @@ VARIABLE_SHARDS = 2
 # ============================================================
 MONGO_URI = "192.168.40.10:8580"
 
-# NOTA: Con estructura retail-based, las BDs de productos son dinámicas
-# Prefijos para identificar BDs de productos por retail
-MONGO_PRODUCTS_DB_PREFIX = (
-    "raw_productos_playwright_" if IS_PROD else "TEST_raw_productos_playwright_"
+# BD fija para productos (colecciones por retail)
+MONGO_PRODUCTS_DB = (
+    "raw_productos_playwright" if IS_PROD else "TEST_raw_productos_playwright"
 )
 MONGO_VARIABLES_DB = (
     "raw_variables_playwright" if IS_PROD else "TEST_raw_variables_playwright"

@@ -111,7 +111,7 @@ with DAG(
         return send_to_rabbit(
             mongo_uri=settings.MONGO_URI,
             mongo_config={
-                'products_db_prefix': settings.MONGO_PRODUCTS_DB_PREFIX,
+                'products_db': settings.MONGO_PRODUCTS_DB,
                 'variables_db': settings.MONGO_VARIABLES_DB,
             },
             rabbit_config={

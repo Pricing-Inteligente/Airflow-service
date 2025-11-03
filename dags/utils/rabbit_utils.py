@@ -35,44 +35,35 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
     channel = connection.channel()
     client = MongoClient(mongo_uri)
 
-    # ---------------- Productos (Retail-based DBs) ----------------
+    # ---------------- Productos ----------------
     channel.queue_declare(queue="productos_ids", durable=True)
     
-    # Obtener todas las BDs que empiezan con el prefijo de productos
-    all_dbs = client.list_database_names()
-    product_dbs = [db for db in all_dbs if db.startswith(mongo_config['products_db_prefix'])]
+    # Conectar a la BD fija de productos
+    db_products = client[mongo_config['products_db']]
+    print(f"[send_to_rabbit] Processing DB: {mongo_config['products_db']}")
     
-    print(f"[send_to_rabbit] Found {len(product_dbs)} retail databases")
-    
-    # Recorrer cada BD de retail
-    for db_name in sorted(product_dbs):
-        db_retail = client[db_name]
-        retail_name = db_name.replace(mongo_config['products_db_prefix'], "")
-        print(f"\n=== Processing retail DB: {db_name} (retail={retail_name}) ===")
-        
-        # Recorrer cada colección (producto) dentro de la BD del retail
-        for collection_name in reversed(db_retail.list_collection_names()):
-            collection = db_retail[collection_name]
-            doc_count = collection.count_documents({})
-            print(f"--- Processing DB={db_name} collection={collection_name} ({doc_count} docs) ---")
+    # Recorrer cada colección (retail)
+    for collection_name in sorted(db_products.list_collection_names()):
+        collection = db_products[collection_name]
+        doc_count = collection.count_documents({})
+        print(f"--- Processing retail collection: {collection_name} ({doc_count} docs) ---")
 
-            for doc in collection.find({}, {"_id": 1}):
-                # Payload ahora incluye la BD (retail) y la colección (producto)
-                payload = {
-                    "db": db_name,
-                    "collection": collection_name,
-                    "_id": str(doc["_id"])
-                }
-                try:
-                    channel.basic_publish(
-                        exchange="",
-                        routing_key="productos_ids",
-                        body=str(payload).encode(),
-                        properties=pika.BasicProperties(delivery_mode=2),
-                    )
-                    print(f"Producto sent: db={db_name} col={collection_name} _id={payload['_id']}")
-                except Exception as e:
-                    print(f"Error sending producto payload {payload}: {e}")
+        for doc in collection.find({}, {"_id": 1}):
+            # Payload simple: colección = retail
+            payload = {
+                "collection": collection_name,  # retail
+                "_id": str(doc["_id"])
+            }
+            try:
+                channel.basic_publish(
+                    exchange="",
+                    routing_key="productos_ids",
+                    body=str(payload).encode(),
+                    properties=pika.BasicProperties(delivery_mode=2),
+                )
+                print(f"Producto sent: retail={collection_name} _id={payload['_id']}")
+            except Exception as e:
+                print(f"Error sending producto payload {payload}: {e}")
 
     # ---------------- Variables ----------------
     db_variables = client[mongo_config['variables_db']]
