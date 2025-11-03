@@ -1,9 +1,13 @@
 """
-Lista de retailers para asignación de workers.
+Lista de retailers (solo para referencia/documentación).
 Total: 49 retailers
 
-En caso de considerar un nuevo retail, se debe 
-agregar al final de la lista.
+NOTA: Esta lista ya NO se usa en el DAG.
+Los spiders leen retailers directamente del CSV y calculan
+automáticamente qué retailers procesar según su shard.
+
+En caso de considerar un nuevo retail, se debe agregar al CSV.
+Esta lista se mantiene como documentación de retailers disponibles.
 """
 
 RETAILERS = [

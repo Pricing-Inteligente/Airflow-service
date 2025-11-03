@@ -11,7 +11,6 @@ from airflow.utils.task_group import TaskGroup
 from airflow.utils.trigger_rule import TriggerRule
 
 # Importar configuraciones y utilidades
-from config.retailers import RETAILERS
 from config import settings
 from utils.rabbit_utils import send_to_rabbit
 from utils.postgres_utils import mongo_productos_to_pg, mongo_variables_to_pg
@@ -28,28 +27,15 @@ default_args = {
 
 
 # ============================================================
-# Lógica de Asignación de Retailers
+# Lógica de Sharding Numérico
 # ============================================================
-print(f"[DAG] Configuración: {len(RETAILERS)} retailers disponibles")
-print(f"[DAG] DEBUG_RETAIL={settings.DEBUG_RETAIL}, PRODUCT_WORKERS={settings.PRODUCT_WORKERS}")
+# Products: sharding numérico por retail (cada worker calcula sus retailers)
+product_shards = list(range(settings.PRODUCT_WORKERS))
+print(f"[DAG] Products: {settings.PRODUCT_WORKERS} workers con sharding numérico por retail")
 
-if settings.DEBUG_RETAIL != "all":
-    # Debug mode: single retail
-    product_retail_assignments = [[settings.DEBUG_RETAIL]]
-    print(f"[DAG] DEBUG MODE: Processing only retail '{settings.DEBUG_RETAIL}'")
-else:
-    # Production mode: batch retailers across workers
-    batch_size = (len(RETAILERS) + settings.PRODUCT_WORKERS - 1) // settings.PRODUCT_WORKERS
-    product_retail_assignments = [
-        RETAILERS[i:i+batch_size] 
-        for i in range(0, len(RETAILERS), batch_size)
-    ]
-    print(f"[DAG] PRODUCTION MODE: {len(product_retail_assignments)} workers, ~{batch_size} retailers each")
-    for idx, batch in enumerate(product_retail_assignments):
-        print(f"[DAG] Worker {idx}: {len(batch)} retailers - {batch[:3]}...")
-
-# Variable workers (unchanged - numeric sharding)
+# Variables: sharding numérico por filas
 variable_shards = list(range(settings.VARIABLE_SHARDS))
+print(f"[DAG] Variables: {settings.VARIABLE_SHARDS} workers con sharding numérico")
 
 
 # ============================================================
@@ -91,8 +77,8 @@ with DAG(
             },
         ).expand(
             command=[
-                f"scrapy crawl simple_product_spider -a retailers='{','.join(retailers)}'"
-                for retailers in product_retail_assignments
+                f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={settings.PRODUCT_WORKERS}"
+                for shard in product_shards
             ]
         )
         

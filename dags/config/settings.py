@@ -16,12 +16,12 @@ MONGO_RESTART = True
 WAIT_FOR_RABBIT = False  # Cambiar a True si quieres esperar automáticamente (puede tomar ~15 hrs)
 
 # ============================================================
-# Retail-based Sharding for Products
+# Sharding Configuration for Products
 # ============================================================
-# Set to retail name (e.g., "Chedraui") for debugging single retail, or "all" for production
-DEBUG_RETAIL = "all"
-# Number of workers when DEBUG_RETAIL="all" (batches 49 retailers into groups)
+# Number of parallel workers for products (numeric sharding by retail)
 PRODUCT_WORKERS = 5
+# Nota: Cada worker calcula automáticamente qué retailers procesar según su shard
+# DEBUG_RETAIL ya no se usa - para debug, ejecuta con shard=0 y total_shards=1
 
 # Variables keep simple numeric sharding
 VARIABLE_SHARDS = 2
