@@ -47,10 +47,10 @@ with DAG(
     default_args=default_args,
     catchup=False,
 ) as dag:
-    
+
     # START
     start = EmptyOperator(task_id="start")
-    
+
     # Pull latest Docker image
     pull_image = BashOperator(
         task_id="pull_latest_image",
@@ -230,10 +230,10 @@ with DAG(
         task_id="mongo_variables_to_pg",
         python_callable=mongo_variables_to_pg_wrapper
     )
-    
+
     # END
     end = EmptyOperator(task_id="end", trigger_rule=TriggerRule.ONE_SUCCESS)
-    
+
     # ============================================================
     # Task Dependencies
     # ============================================================

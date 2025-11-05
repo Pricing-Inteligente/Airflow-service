@@ -49,8 +49,9 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
         print(f"--- Processing retail collection: {collection_name} ({doc_count} docs) ---")
 
         for doc in collection.find({}, {"_id": 1}):
-            # Payload simple: colección = retail
+            # Payload con BBDD, colección (retail) y _id
             payload = {
+                "database": mongo_config['products_db'],
                 "collection": collection_name,  # retail
                 "_id": str(doc["_id"])
             }
@@ -61,7 +62,7 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
                     body=str(payload).encode(),
                     properties=pika.BasicProperties(delivery_mode=2),
                 )
-                print(f"Producto sent: retail={collection_name} _id={payload['_id']}")
+                print(f"Producto sent: db={payload['database']} collection={collection_name} _id={payload['_id']}")
             except Exception as e:
                 print(f"Error sending producto payload {payload}: {e}")
 
@@ -75,7 +76,12 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
         print(f"--- Processing variables collection: {collection_name} ---")
 
         for doc in collection.find({}, {"_id": 1}):
-            payload = {"collection": collection_name, "_id": str(doc["_id"])}
+            # Payload con BBDD, colección y _id
+            payload = {
+                "database": mongo_config['variables_db'],
+                "collection": collection_name,
+                "_id": str(doc["_id"])
+            }
             try:
                 channel.basic_publish(
                     exchange="",
@@ -83,7 +89,7 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
                     body=str(payload).encode(),
                     properties=pika.BasicProperties(delivery_mode=2),
                 )
-                print("Variable sent:", payload)
+                print(f"Variable sent: db={payload['database']} collection={collection_name} _id={payload['_id']}")
             except Exception as e:
                 print(f"Error sending variable payload {payload}: {e}")
 
