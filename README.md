@@ -97,7 +97,9 @@ make airflow-up           # build + docker compose up -d
 3. `scraping_group`: ejecuta spiders de productos y variables de forma paralela con sharding numérico.
 4. `send_ids_to_rabbit`: publica IDs en RabbitMQ para procesos posteriores.
 5. `mongo_productos_to_pg` y `mongo_variables_to_pg`: migran datos limpios a PostgreSQL (pueden esperar señales de RabbitMQ dependiendo de `WAIT_FOR_RABBIT`).
-6. `end`: marca el cierre del pipeline (éxito si al menos una migración finaliza correctamente).
+6. (planificado) `lasso_train_and_export`: ejecuta el pipeline de LASSO tras la persistencia en PostgreSQL; exporta coeficientes, métricas y tablas listas para ingesta.
+7. (planificado) `milvus_embedding_ingest`: invoca el servicio de Embeddings/RAG para crear/actualizar colecciones en Milvus (incluida `lasso_models`) y verificar índices.
+8. `end`: marca el cierre del pipeline (éxito si al menos una migración finaliza correctamente; en despliegues completos, tras las tareas de LASSO e ingesta a Milvus).
 
 ## Comandos útiles
 - Detener la pila:
