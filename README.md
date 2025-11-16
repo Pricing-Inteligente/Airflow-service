@@ -1,6 +1,6 @@
 # Airflow Orchestrator
 
-Pipeline de orquestación basado en Apache Airflow para coordinar el scraping distribuido, la limpieza de MongoDB y la migración de datos hacia RabbitMQ y PostgreSQL.
+Pipeline de orquestación basado en Apache Airflow para coordinar el scraping distribuido, la limpieza de MongoDB y la migración de datos hacia RabbitMQ -> PostgreSQL -> Procesamiento Lasso y finalmente -> Milvus.
 
 ## Arquitectura
 - **Airflow** se ejecuta con `CeleryExecutor`, respaldado por **PostgreSQL** y **Redis** en contenedores Docker.
