@@ -13,7 +13,7 @@ MONGO_RESTART = False
 # ============================================================
 # Si es True, esperará a que las colas de RabbitMQ estén vacías antes de migrar a PostgreSQL
 # Si es False, migrará inmediatamente sin esperar (útil para ejecución manual)
-WAIT_FOR_RABBIT = False  # Cambiar a True si quieres esperar automáticamente (puede tomar ~15 hrs)
+WAIT_FOR_RABBIT = True  # Cambiar a True si quieres esperar automáticamente (puede tomar ~15 hrs)
 
 # ============================================================
 # Sharding Configuration for Products
