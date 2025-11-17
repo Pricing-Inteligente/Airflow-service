@@ -5,8 +5,8 @@ Configuración centralizada para el DAG de scraping.
 # ============================================================
 # Environment Configuration
 # ============================================================
-IS_PROD = True
-MONGO_RESTART = True
+IS_PROD = False
+MONGO_RESTART = False
 
 # ============================================================
 # RabbitMQ Wait Control

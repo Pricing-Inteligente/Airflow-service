@@ -31,7 +31,7 @@ PG_PRODUCTS_CURRENCY_COLUMN = "moneda"
 PG_PRODUCTS_UNIT_COLUMN = None     # reemplazar por nombre de columna si existe (ej. "unit")
 PG_PRODUCTS_QTY_COLUMN = None      # reemplazar por nombre de columna si existe (ej. "qty")
 
-MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_PRODUCTOS", "products_latam")
+MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_PRODUCTOS", "demo_products_latam")
 PRIMARY_KEY_FIELD = "product_id"
 VECTOR_FIELD = "embedding"
 TEXT_FIELD = "canonical_text"

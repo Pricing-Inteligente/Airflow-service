@@ -57,7 +57,7 @@ ALIAS_COEF_PPI = "coef_producer_prices_pct_change"
 
 MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
 MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-MILVUS_COLLECTION = os.getenv("MILVUS_LASSO_COLLECTION", "lasso_models")
+MILVUS_COLLECTION = os.getenv("MILVUS_LASSO_COLLECTION", "demo_lasso_models")
 MILVUS_RECREATE = os.getenv("MILVUS_RECREATE_COLLECTION", "1") == "1"
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "intfloat/multilingual-e5-base")

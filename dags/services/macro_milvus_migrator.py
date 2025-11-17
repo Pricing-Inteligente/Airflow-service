@@ -10,7 +10,7 @@ import psycopg2
 # --------- Config ---------
 MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
 MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-COLL_NAME = os.getenv("MILVUS_COLLECTION_MACRO", "macro_latam")
+COLL_NAME = os.getenv("MILVUS_COLLECTION_MACRO", "demo_macro_latam")
 
 PG_HOST = os.getenv("PG_HOST")
 PG_PORT = int(os.getenv("PG_PORT", "5432"))
