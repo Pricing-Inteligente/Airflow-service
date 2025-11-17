@@ -7,7 +7,7 @@ from datetime import datetime
 from .rabbit_utils import wait_for_queue_empty
 
 
-def mongo_productos_to_pg(mongo_uri, mongo_clean_db, pg_config, wait_for_rabbit_flag, rabbit_config):
+def mongo_productos_to_pg(mongo_uri, mongo_clean_db, pg_config, wait_for_rabbit_flag, rabbit_config, pg_table_name=None):
     """
     Migra productos limpiados desde MongoDB a PostgreSQL.
     Si wait_for_rabbit_flag=True, espera a que la cola de RabbitMQ esté vacía (puede tomar ~15 hrs).
@@ -19,10 +19,15 @@ def mongo_productos_to_pg(mongo_uri, mongo_clean_db, pg_config, wait_for_rabbit_
             - host, port, dbname, user, password
         wait_for_rabbit_flag: Bool para esperar cola de RabbitMQ
         rabbit_config: Dict con configuración de RabbitMQ (para wait_for_queue_empty)
+            - queue_productos: Nombre de la cola para productos
+        pg_table_name: Nombre de la tabla de PostgreSQL (default: "productos_clean_fields")
     """
+    table_name = pg_table_name or "productos_clean_fields"
+    queue_name = rabbit_config.get('queue_productos', 'productos_ids')
+    
     if wait_for_rabbit_flag:
-        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola 'productos_ids' (puede tomar varias horas)...")
-        wait_for_queue_empty("productos_ids", rabbit_config)
+        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola '{queue_name}' (puede tomar varias horas)...")
+        wait_for_queue_empty(queue_name, rabbit_config)
     else:
         print(f"🐰 WAIT_FOR_RABBIT=False: Saltando espera de RabbitMQ, procediendo directamente a PostgreSQL")
 
@@ -41,8 +46,8 @@ def mongo_productos_to_pg(mongo_uri, mongo_clean_db, pg_config, wait_for_rabbit_
 
     # Crear tabla si no existe
     cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS productos_clean_fields (
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
             _id TEXT PRIMARY KEY,
             nombre TEXT,
             marca TEXT,
@@ -85,8 +90,8 @@ def mongo_productos_to_pg(mongo_uri, mongo_clean_db, pg_config, wait_for_rabbit_
 
         # Inserción con manejo de conflicto
         cur.execute(
-            """
-            INSERT INTO productos_clean_fields (
+            f"""
+            INSERT INTO {table_name} (
                 _id, nombre, marca, precio, referencia, cantidad, unidad,
                 descripcion, fecha, categoria, pais, retail
             )
@@ -126,7 +131,7 @@ def mongo_productos_to_pg(mongo_uri, mongo_clean_db, pg_config, wait_for_rabbit_
     print("✅ Productos guardados en PostgreSQL con campos limpios y externos.")
 
 
-def mongo_variables_to_pg(mongo_uri, mongo_clean_var_db, pg_config, wait_for_rabbit_flag, rabbit_config):
+def mongo_variables_to_pg(mongo_uri, mongo_clean_var_db, pg_config, wait_for_rabbit_flag, rabbit_config, pg_table_name=None):
     """
     Migra variables limpiadas desde MongoDB a PostgreSQL.
     Si wait_for_rabbit_flag=True, espera a que la cola de RabbitMQ esté vacía (puede tomar ~15 hrs).
@@ -138,10 +143,15 @@ def mongo_variables_to_pg(mongo_uri, mongo_clean_var_db, pg_config, wait_for_rab
             - host, port, dbname, user, password
         wait_for_rabbit_flag: Bool para esperar cola de RabbitMQ
         rabbit_config: Dict con configuración de RabbitMQ (para wait_for_queue_empty)
+            - queue_variables: Nombre de la cola para variables
+        pg_table_name: Nombre de la tabla de PostgreSQL (default: "variables_clean_fields")
     """
+    table_name = pg_table_name or "variables_clean_fields"
+    queue_name = rabbit_config.get('queue_variables', 'variables_ids')
+    
     if wait_for_rabbit_flag:
-        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola 'variables_ids' (puede tomar varias horas)...")
-        wait_for_queue_empty("variables_ids", rabbit_config)
+        print(f"🐰 WAIT_FOR_RABBIT=True: Esperando cola '{queue_name}' (puede tomar varias horas)...")
+        wait_for_queue_empty(queue_name, rabbit_config)
     else:
         print(f"🐰 WAIT_FOR_RABBIT=False: Saltando espera de RabbitMQ, procediendo directamente a PostgreSQL")
 
@@ -160,8 +170,8 @@ def mongo_variables_to_pg(mongo_uri, mongo_clean_var_db, pg_config, wait_for_rab
 
     # Crear tabla si no existe
     cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS variables_clean_fields (
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
             _id TEXT PRIMARY KEY,
             nombre TEXT,
             valor TEXT,
@@ -187,8 +197,8 @@ def mongo_variables_to_pg(mongo_uri, mongo_clean_var_db, pg_config, wait_for_rab
         fecha = datetime.now().strftime("%y.%m.%d.%H")
 
         cur.execute(
-            """
-            INSERT INTO variables_clean_fields (_id, nombre, valor, previous, unit, pais, fecha)
+            f"""
+            INSERT INTO {table_name} (_id, nombre, valor, previous, unit, pais, fecha)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (_id) DO UPDATE SET
                 nombre = EXCLUDED.nombre,

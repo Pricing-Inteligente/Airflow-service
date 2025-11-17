@@ -126,6 +126,8 @@ with DAG(
                 "IS_PROD": str(settings.IS_PROD),
                 "MONGO_URI": settings.MONGO_URI,
                 "MONGO_RESTART": str(settings.MONGO_RESTART),
+                "MONGO_PRODUCTS_DB": settings.MONGO_PRODUCTS_DB,  # BD desde Airflow settings
+                "MONGO_VARIABLES_DB": settings.MONGO_VARIABLES_DB,  # BD desde Airflow settings
             },
         ).expand(command=[
                 f"scrapy crawl simple_product_spider -a shard={shard} -a total_shards={settings.PRODUCT_WORKERS}"
@@ -145,6 +147,8 @@ with DAG(
                 "IS_PROD": str(settings.IS_PROD),
                 "MONGO_URI": settings.MONGO_URI,
                 "MONGO_RESTART": str(settings.MONGO_RESTART),
+                "MONGO_PRODUCTS_DB": settings.MONGO_PRODUCTS_DB,  # BD desde Airflow settings
+                "MONGO_VARIABLES_DB": settings.MONGO_VARIABLES_DB,  # BD desde Airflow settings
             },
         ).expand(command=[
                 f"scrapy crawl simple_variable_spider -a shard={shard} -a total_shards={settings.VARIABLE_SHARDS}"
@@ -160,6 +164,8 @@ with DAG(
             mongo_config={
                 'products_db': settings.MONGO_PRODUCTS_DB,
                 'variables_db': settings.MONGO_VARIABLES_DB,
+                'clean_products_db': settings.MONGO_CLEAN_DB,  # BD clean para productos
+                'clean_variables_db': settings.MONGO_CLEAN_VAR_DB,  # BD clean para variables
             },
             rabbit_config={
                 'host': settings.RABBIT_HOST,
@@ -167,7 +173,9 @@ with DAG(
                 'user': settings.RABBIT_USER,
                 'pass': settings.RABBIT_PASS,
                 'vhost': settings.RABBIT_VHOST,
-                              })
+                'queue_productos': settings.RABBIT_QUEUE_PRODUCTOS,  # Nombre de cola desde settings
+                'queue_variables': settings.RABBIT_QUEUE_VARIABLES,  # Nombre de cola desde settings
+            })
 
     queue_to_rabbit = PythonOperator(task_id="send_ids_to_rabbit",
                                      python_callable=send_to_rabbit_wrapper)
@@ -182,6 +190,7 @@ with DAG(
             'port': settings.RABBIT_PORT,
             'user': settings.RABBIT_USER,
             'pass': settings.RABBIT_PASS,
+            'queue_productos': settings.RABBIT_QUEUE_PRODUCTOS,  # Nombre de cola desde settings
         }
         pg_config = {
             'host': settings.PG_HOST,
@@ -195,7 +204,8 @@ with DAG(
             mongo_clean_db=settings.MONGO_CLEAN_DB,
             pg_config=pg_config,
             wait_for_rabbit_flag=settings.WAIT_FOR_RABBIT,
-            rabbit_config=rabbit_config)
+            rabbit_config=rabbit_config,
+            pg_table_name=settings.PG_TABLE_PRODUCTOS)  # Nombre de tabla desde settings
     
     def mongo_variables_to_pg_wrapper(**kwargs):
         """Wrapper para mongo_variables_to_pg con configuración"""
@@ -204,6 +214,7 @@ with DAG(
             'port': settings.RABBIT_PORT,
             'user': settings.RABBIT_USER,
             'pass': settings.RABBIT_PASS,
+            'queue_variables': settings.RABBIT_QUEUE_VARIABLES,  # Nombre de cola desde settings
         }
         pg_config = {
             'host': settings.PG_HOST,
@@ -217,7 +228,8 @@ with DAG(
             mongo_clean_var_db=settings.MONGO_CLEAN_VAR_DB,
             pg_config=pg_config,
             wait_for_rabbit_flag=settings.WAIT_FOR_RABBIT,
-            rabbit_config=rabbit_config)
+            rabbit_config=rabbit_config,
+            pg_table_name=settings.PG_TABLE_VARIABLES)  # Nombre de tabla desde settings
     
     task_productos = PythonOperator(
         task_id="mongo_productos_to_pg",
@@ -270,6 +282,7 @@ with DAG(
             os.environ["PG_PASSWORD"] = settings.PG_PASS
             os.environ["MILVUS_HOST"] = settings.MILVUS_HOST
             os.environ["MILVUS_PORT"] = str(settings.MILVUS_PORT)
+            os.environ["MILVUS_COLLECTION_PRODUCTOS"] = settings.MILVUS_COLLECTION_PRODUCTOS  # Nombre de colección desde settings
             if hasattr(settings, 'MILVUS_DB'):
                 os.environ["MILVUS_DB"] = settings.MILVUS_DB
 
@@ -307,6 +320,7 @@ with DAG(
             os.environ["PG_PASSWORD"] = settings.PG_PASS
             os.environ["MILVUS_HOST"] = settings.MILVUS_HOST
             os.environ["MILVUS_PORT"] = str(settings.MILVUS_PORT)
+            os.environ["MILVUS_COLLECTION_MACRO"] = settings.MILVUS_COLLECTION_MACRO  # Nombre de colección desde settings
 
             # Importar y ejecutar migrate de macro_milvus_migrator.py
             try:
@@ -339,6 +353,7 @@ with DAG(
             os.environ["PG_PASSWORD"] = settings.PG_PASS
             os.environ["MILVUS_HOST"] = settings.MILVUS_HOST
             os.environ["MILVUS_PORT"] = str(settings.MILVUS_PORT)
+            os.environ["MILVUS_LASSO_COLLECTION"] = settings.MILVUS_COLLECTION_LASSO  # Nombre de colección desde settings
 
             migrate_lasso_to_milvus()
             print("✅ Migración a Milvus completada exitosamente")

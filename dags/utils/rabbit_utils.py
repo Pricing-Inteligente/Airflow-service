@@ -13,10 +13,14 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
     Args:
         mongo_uri: URI de conexión a MongoDB
         mongo_config: Dict con configuración de MongoDB
-            - products_db_prefix: Prefijo para BDs de productos
+            - products_db: Nombre de BD de productos
             - variables_db: Nombre de BD de variables
+            - clean_products_db: Nombre de BD clean para productos
+            - clean_variables_db: Nombre de BD clean para variables
         rabbit_config: Dict con configuración de RabbitMQ
             - host, port, user, pass, vhost
+            - queue_productos: Nombre de la cola para productos
+            - queue_variables: Nombre de la cola para variables
     """
     print(f"=== SENDING TO RABBIT at {rabbit_config['host']}:{rabbit_config['port']} ===")
 
@@ -36,7 +40,8 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
     client = MongoClient(mongo_uri)
 
     # ---------------- Productos ----------------
-    channel.queue_declare(queue="productos_ids", durable=True)
+    queue_productos = rabbit_config.get('queue_productos', 'productos_ids')
+    channel.queue_declare(queue=queue_productos, durable=True)
     
     # Conectar a la BD fija de productos
     db_products = client[mongo_config['products_db']]
@@ -49,16 +54,17 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
         print(f"--- Processing retail collection: {collection_name} ({doc_count} docs) ---")
 
         for doc in collection.find({}, {"_id": 1}):
-            # Payload con BBDD, colección (retail) y _id
+            # Payload con BD fuente, BD clean, colección (retail) y _id
             payload = {
                 "database": mongo_config['products_db'],
+                "clean_database": mongo_config.get('clean_products_db'),  # BD clean desde settings
                 "collection": collection_name,  # retail
                 "_id": str(doc["_id"])
             }
             try:
                 channel.basic_publish(
                     exchange="",
-                    routing_key="productos_ids",
+                    routing_key=queue_productos,
                     body=str(payload).encode(),
                     properties=pika.BasicProperties(delivery_mode=2),
                 )
@@ -68,7 +74,8 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
 
     # ---------------- Variables ----------------
     db_variables = client[mongo_config['variables_db']]
-    channel.queue_declare(queue="variables_ids", durable=True)
+    queue_variables = rabbit_config.get('queue_variables', 'variables_ids')
+    channel.queue_declare(queue=queue_variables, durable=True)
 
     # ---------------- Enviar variables ----------------
     for collection_name in reversed(db_variables.list_collection_names()):
@@ -76,16 +83,17 @@ def send_to_rabbit(mongo_uri, mongo_config, rabbit_config):
         print(f"--- Processing variables collection: {collection_name} ---")
 
         for doc in collection.find({}, {"_id": 1}):
-            # Payload con BBDD, colección y _id
+            # Payload con BD fuente, BD clean, colección y _id
             payload = {
                 "database": mongo_config['variables_db'],
+                "clean_database": mongo_config.get('clean_variables_db'),  # BD clean desde settings
                 "collection": collection_name,
                 "_id": str(doc["_id"])
             }
             try:
                 channel.basic_publish(
                     exchange="",
-                    routing_key="variables_ids",
+                    routing_key=queue_variables,
                     body=str(payload).encode(),
                     properties=pika.BasicProperties(delivery_mode=2),
                 )

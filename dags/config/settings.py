@@ -33,14 +33,18 @@ MONGO_URI = "192.168.40.10:8580"
 
 # BD fija para productos (colecciones por retail)
 MONGO_PRODUCTS_DB = (
-    "raw_productos_playwright" if IS_PROD else "TEST_raw_productos_playwright"
+    "raw_productos_demo" if IS_PROD else "TEST_raw_productos_demo"
 )
 MONGO_VARIABLES_DB = (
-    "raw_variables_playwright" if IS_PROD else "TEST_raw_variables_playwright"
+    "raw_variables_demo" if IS_PROD else "TEST_raw_variables_demo"
 )
 
-MONGO_CLEAN_DB = "clean_productos"
-MONGO_CLEAN_VAR_DB = "clean_variables"
+MONGO_CLEAN_DB = (
+    "clean_productos_demo" if IS_PROD else "TEST_clean_productos_demo"
+)
+MONGO_CLEAN_VAR_DB = (
+    "clean_variables_demo" if IS_PROD else "TEST_clean_variables_demo"
+)
 
 # ============================================================
 # RabbitMQ Configuration
@@ -50,6 +54,8 @@ RABBIT_PORT = 8180  # puerto mappeado a 5672 en docker
 RABBIT_USER = "admin"
 RABBIT_PASS = "adminpassword"
 RABBIT_VHOST = "/"  # virtual host por defecto
+RABBIT_QUEUE_PRODUCTOS = "productos_ids"  # Nombre de la cola para productos
+RABBIT_QUEUE_VARIABLES = "variables_ids"  # Nombre de la cola para variables
 
 # ============================================================
 # PostgreSQL Configuration
@@ -59,6 +65,8 @@ PG_PORT = 8080
 PG_DB = "mydb"
 PG_USER = "admin"
 PG_PASS = "adminpassword"
+PG_TABLE_PRODUCTOS = "demo_tabla_precios"  # Nombre de la tabla para productos
+PG_TABLE_VARIABLES = "demo_tabla_macroeconomicas"  # Nombre de la tabla para variables
 
 # ============================================================
 # Milvus Configuration
@@ -66,6 +74,9 @@ PG_PASS = "adminpassword"
 MILVUS_HOST = "192.168.40.10"
 MILVUS_PORT = 19530  # Puerto gRPC de Milvus (no HTTP)
 MILVUS_DB = "default"  # Base de datos de Milvus (namespace)
+MILVUS_COLLECTION_PRODUCTOS = "demo_products_latam"  # Nombre de la colección para productos
+MILVUS_COLLECTION_MACRO = "demo_macro_latam"  # Nombre de la colección para variables macro
+MILVUS_COLLECTION_LASSO = "demo_lasso_models"  # Nombre de la colección para modelos LASSO
 
 # ============================================================
 # Docker Configuration
