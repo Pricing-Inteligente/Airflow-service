@@ -61,6 +61,13 @@ PG_USER = "admin"
 PG_PASS = "adminpassword"
 
 # ============================================================
+# Milvus Configuration
+# ============================================================
+MILVUS_HOST = "192.168.40.10"
+MILVUS_PORT = 19530  # Puerto gRPC de Milvus (no HTTP)
+MILVUS_DB = "default"  # Base de datos de Milvus (namespace)
+
+# ============================================================
 # Docker Configuration
 # ============================================================
 IMAGE_NAME = "sboterop/scrapy-app:latest"
