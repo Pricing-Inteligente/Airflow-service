@@ -171,7 +171,7 @@ with DAG(
         print(f"=== SENDING TO RABBIT at {settings.RABBIT_HOST}:{settings.RABBIT_PORT} ===")
 
 
-        time.sleep(300)  # 5 minutos = 300 segundos
+        time.sleep(120)  # 5 minutos = 300 segundos
 
         
         try:
