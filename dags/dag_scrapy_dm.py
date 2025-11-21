@@ -3,6 +3,7 @@
 # ============================================================
 import os
 import sys
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 from airflow import DAG
@@ -168,6 +169,10 @@ with DAG(
         import pika
         
         print(f"=== SENDING TO RABBIT at {settings.RABBIT_HOST}:{settings.RABBIT_PORT} ===")
+
+
+        time.sleep(300)  # 5 minutos = 300 segundos
+
         
         try:
             client = MongoClient(settings.MONGO_URI)
